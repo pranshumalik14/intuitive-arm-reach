@@ -40,7 +40,7 @@ We slightly modify the robot arm reach task described above by adding a time-lim
 
 \begin{itemize}
 	\item \textbf{Reach cost} $||{^W\mathbf{p}_{T, N}} - {^W}\mathbf{p}_{g}||^2$: The squared-distance between the end-effector and the goal positions at the end of the movement ($t = T$). This cost expresses that we want to reach the goal as closely as possible.
-	\item\textbf{Comfort cost} $\max(\mathbf{q}_T)$: A cost that corresponds to the largest angle over all  the joints, $0\leq n \leq N$, at the end of the movement. This cost expresses the desire for end-state comfort.
+	\item\textbf{Comfort cost} $\max(\mathbf{q}_T)$: A cost that corresponds to the largest angle over all  the joints, $1\leq n \leq N$, at the end of the movement. This cost expresses the desire for end-state comfort.
 	\item \textbf{Acceleration cost} $r_t$: At each time step $t$, this cost in (\ref{eqn:immediate_cost}) penalizes joint accelerations. The weighting term $(N+1-n)$ penalizes DOFs closer to the origin; the underlying motivation being that wrist movements are less costly than shoulder movements for humans.
 \end{itemize}
 
@@ -94,7 +94,7 @@ Note that since $\ddot{\mathbf{q}}$ is a continuous function, we discretize it i
 In this project, we attempt to extend and generalize the PDFF-based reach learning method in \cite{pdff} to any robot, including $3-$dimensional multi-jointed arms, and for the entire reachable space, both of which, to our best knowledge, have not been attempted in literature. We have also abstracted the roll-out process for supporting dynamic simulations to get accurate evaluations of joint trajectories for deploying this algorithm on real robots. Lastly, this method has only been implemented in \texttt{MATLAB}, and as a first step, implementing the entire framework using \texttt{Python} and \texttt{C++} is itself a meaningful contribution as it can then be directly applied in real-world use cases.
 
 \section{Extensions and Future Steps}
-Currently, this reach-control approach is posed as an open-loop policy during run-time, and assumes perfect transfer to real and simulated robots (with different conditions). This may be corrected for by using vision feedback and a goal-directed formulation, akin to full goal-attractor DMPs, but the main aim of this project is to evaluate generalization of learning in the time-activation representation of joint trajectories. This algorithm Will be run on a real robot and in simulation to validate the procedure. Time permitting, we can also test this method for robots with non-spherical wrists, which we initially restricted for simplicity.
+Currently, this reach-control approach is posed as an open-loop policy during run-time, and assumes perfect transfer to real and simulated robots (with different conditions). This may be corrected for by using vision feedback and a goal-directed formulation, akin to full goal-attractor DMPs, but the main aim of this project is to evaluate generalization of learning in the time-activation representation of joint trajectories. This algorithm will be run on a real robot and in simulation to validate the procedure. Time permitting, we can also test this method for robots with non-spherical wrists, which we initially restricted for simplicity.
 
 \begin{thebibliography}{5}
 \bibitem{pdff}
