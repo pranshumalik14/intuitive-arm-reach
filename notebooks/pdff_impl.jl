@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 9c7f4855-7a32-40eb-bee9-bfcdf0defd98
-using LinearAlgebra, Plots, PlutoUI
+using LinearAlgebra, Plots, PlutoUI, Distributions, LaTeXStrings
 
 # ╔═╡ 3f015e30-6141-11ec-2426-8fe9b0fd9896
 md"
@@ -20,10 +20,46 @@ Many things to note here. Primarily this paper (cite it) involves the following:
 
 We first define the target, pₜ.
 
+This is a template; can easily generalize to N-DOF and non-planar. Limited by FK function generality, and simulation rollout fidelity (kinematic/dynamic sims...).
+
 "
 
-# ╔═╡ a8fb04bd-1425-44ab-a4bc-faf79fccc4af
-ʷpₜ = [0.3, 0.7]; # x, y
+# ╔═╡ 77c4b466-f0f4-4f4e-81d8-5597b623b034
+T = 1; N = 2; Δt = 1e-2; # dur of motion, T, num joints, N, and discrete interval, Δt
+
+# ╔═╡ 579a522a-ed0b-4d96-96c4-9b4627100b27
+l₁ = 0.8; l₂ = 0.5;      # arm link lengths
+
+# ╔═╡ 13fa12b5-04fe-4439-b410-64427157be73
+begin
+	qₛ  = [π/8, π/4];    # starting joint configuration
+	ʷpₜ = [0.3, 0.7];    # x, y of target location
+end;
+
+# ╔═╡ 8b62aae3-46f3-47f3-b526-6663eaf19aae
+begin
+	function plot_arm(l₁, l₂, q₁, q₂; alpha=1.0)
+		x = [0, l₁*cos(q₁), l₂*cos(q₁+q₂) + l₁*cos(q₁)]
+		y = [0, l₁*sin(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)]
+		plot(x, y; xlims=(-(l₁+l₂), l₁+l₂), ylims=(-(l₁+l₂), l₁+l₂), linewidth=5, 
+			legend=false, aspect_ratio=:equal, alpha=alpha)
+	end
+	function plot_target(xₜ, yₜ)
+		scatter!([xₜ], [yₜ]; markercolor="orange", markersize=7, markershape=:star5)
+	end
+	function plot_base()
+		scatter!([0], [-0.04]; markercolor="grey", markersize=7, 
+			markershape=:utriangle)
+	end
+	function plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ)
+		plot_arm(l₁, l₂, q₁, q₂)
+		xₛ = l₂*cos(q₁+q₂) + l₁*cos(q₁)
+		yₛ = l₂*sin(q₁+q₂) + l₁*sin(q₁)
+		plot_target(xₜ, yₜ)
+		plot_base()
+	end
+	plot_env(l₁, l₂, qₛ..., ʷpₜ...)
+end
 
 # ╔═╡ d8e89f3d-6358-436f-96d7-e255bde19c60
 md"
@@ -35,15 +71,29 @@ Costs.
 "
 
 # ╔═╡ eb83fcda-95f1-4166-b851-5a3d0f090e4d
-kt = ; kT = ;
+kt = 1e-5; kT = 1e2;
+
+# ╔═╡ 6df3c802-ae7c-4532-ab61-15d31257e514
+begin
+	norm2(v::AbstractVector) = v'*v;
+	double_integrate(ẍ) = begin 
+		x = ẋ = zeros(size(ẍ)...);
+		for i ∈ 2:size(ẍ, 2) 
+			ẋ[i, :] = ẋ[i-1, :] + ẍ[i, :]*Δt;
+			x[i, :] = x[i-1, :] + ẋ[i, :]*Δt;
+		end
+		return x
+	end
+end;
 
 # ╔═╡ 10a7e2d8-180e-4072-97c9-26d8adb39690
 begin
-	pₙ(q₁, q₂) = (x=l₂*cos(q₁+q₂) + l₁*cos(q₁), y=l₂*sin(q₁+q₂) + l₁*sin(q₁));
-	qₜ(q̈) = ;
-	rₜ(q̈) = ;
-	cₜ(q) = ;
-	J(θ) = ;
+	p²ₙ(q₁, q₂) = (x=l₂*cos(q₁+q₂) + l₁*cos(q₁), y=l₂*sin(q₁+q₂) + l₁*sin(q₁));
+	pₙ(q)  = length(q) == 2 && p²ₙ(q...);
+	q(q̈)   = double_integrate(q̈);
+	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
+	Cₜ(q)  = kT*norm2(pₙ(q[end]) - ʷpₜ) + maximum(q);
+	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈));
 end
 
 # ╔═╡ 0e771a6e-3374-43ef-ab3a-735a0f3982d1
@@ -53,26 +103,26 @@ md"
 
 The algorithm is as follows:
 > **inputs:**
-> - initial parameter vector $$\theta^\text{init}$$ 
+> - initial parameter vector $$\theta_\text{init}$$ 
 > - cost function $$J: \theta \mapsto \mathbb{R}$$
-> - exploration levels: $$\lambda^\text{init}$$, $$\lambda^\text{min}$$, $$\lambda^\text{max}$$
+> - exploration levels: $$\lambda_\text{init}$$, $$\lambda_\text{min}$$, $$\lambda_\text{max}$$
 > - roll-outs per update: $$K$$
 > - eliteness parameter: $$h$$
 > **procedure:**
-> - let $$\theta = \theta^\text{init}$$; $$\Sigma = \lambda^\text{init}\mathbf{I}$$
+> - let $$\theta = \theta_\text{init}$$; $$\Sigma = \lambda_\text{init}\mathbf{I}$$
 > - **while** cost not converged **do**
 >   - *Exploration: sample parameters*
 >   - **foreach** $$k$$ in $$K$$ **do**
 >       - let $$\theta_k \sim \mathcal{N}(\theta, \Sigma)$$; $$J_k = J(\theta_k)$$ $$\triangleright$$ *cost of iterations*
 >   - **end**
->   - let $$J^\text{min} = \min{\{J_k\}_{k=1}^K}$$; $$J^\text{max} = \max{\{J_k\}_{k=1}^K}$$
+>   - let $$J_\text{min} = \min{\{J_k\}_{k=1}^K}$$; $$J_\text{max} = \max{\{J_k\}_{k=1}^K}$$
 >   - *Evaluation: compute weight for each sample*
 >   - **foreach** $$k$$ in $$K$$ **do**
->       - let $$P_k = \frac{\exp\left(-h\frac{J_k - J^\text{min}}{J^\text{max} - J^\text{min}}\right)}{\sum_{l=1}^K\exp\left(-h\frac{J_l - J^\text{min}}{J^\text{max} - J^\text{min}}\right)}$$ $$\triangleright$$ *relative probabilities for iterations*
+>       - let $$P_k = \frac{\exp\left(-h\frac{J_k - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}{\sum_{l=1}^K\exp\left(-h\frac{J_l - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}$$ $$\triangleright$$ *relative probabilities for iterations*
 >   - **end**
 >   - *Update: weighted averaging over $$K$$ samples*
 >   - define $$\mathbf{\Sigma} \gets \sum_{k=1}^{K}[P_k(\theta_k-\theta)(\theta_k-\theta)^\intercal]$$
->   - set $$\mathbf{\Sigma} \gets \texttt{boundcovar}(\mathbf{\Sigma}, \lambda^\text{min}, \lambda^\text{max})$$
+>   - set $$\mathbf{\Sigma} \gets \texttt{boundcovar}(\mathbf{\Sigma}, \lambda_\text{min}, \lambda_\text{max})$$
 >   - define $$\theta_\text{new} \gets \sum_{k=1}^K [P_k \theta_k]$$
 > - **end**
 
@@ -80,14 +130,12 @@ The algorithm is as follows:
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
-	l₁ = 0.8; l₂ = 0.5;            # arm link lengths
-	λᵢₙᵢₜ = λₘᵢₙ = 0.05; λₘₐₓ = 5; # todo: set λₘₐₓ acc. to real runs and needs
-	N = 2; B = 10;                 # number of joints, N, and basis functions, B
-	K = 20; h = 10;                # number of rollouts, K, and eliteness param, h
+	λᵢₙᵢₜ = λₘᵢₙ = 0.05; λₘₐₓ = 5; # exploration levels; TODO: set λₘₐₓ acc. to need
+	B = 10; w = T/2B;              # num basis funcs, B, and width of basis funcs, w
 	Σ = cat([Diagonal(λᵢₙᵢₜ*I, B) for i ∈ 1:N]...; dims=3); # covar matrix
 	Θ = zeros(B, N);               # no default action to start with
-	T = 1; w = T/2B;               # duration of motion, T, and width of basis func, w
-end
+	K = 20; h = 10;                # number of rollouts, K, and eliteness param, h
+end;
 
 # ╔═╡ 604109a4-e3fc-4d7f-aea0-643d8fd87c0e
 begin
@@ -100,26 +148,41 @@ begin
 end
 
 # ╔═╡ 877321e9-2e56-482c-956c-df442cc2ff9e
-gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :]) for b ∈ 1:B]; plot!() |> as_svg
+gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+
+# ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
+# TODO: define from matrix theta and change pseudocode above to now include mat Θ
+J(Θ) = begin
+	q̈(t) = q̈(Θ, t); q̈s = hcat(q̈.(0:Δt:T)...);
+	return J̃(q̈s)
+end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function pibb()
-	#
+function PIᴮᴮ(; tol=1e-6)
+	# while abs(prevJ-J) > tol: keep on iterating.
+	# return (Θ=Θ, iter=iter)
 end
 
 # ╔═╡ 41e81c55-0f20-4fae-aa7b-60239db2e807
-function pdff()
-	#
+function PDFF() # takes input of starting and target config; runs and produces result
+	# return q̈(t)
 end
+
+# ╔═╡ 03da8f0a-2dac-470b-b3a6-35083cb867e0
+# TODO: produce gif from q[:] history of final output from pdff
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 
 [compat]
+Distributions = "~0.25.37"
+LaTeXStrings = "~1.3.0"
 Plots = "~1.25.3"
 PlutoUI = "~0.7.27"
 """
@@ -231,9 +294,21 @@ uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
+[[DensityInterface]]
+deps = ["InverseFunctions", "Test"]
+git-tree-sha1 = "80c3e8639e3353e5d2912fb3a1916b8455e2494b"
+uuid = "b429d917-457f-4dbc-8f4c-0cc954292b1d"
+version = "0.4.0"
+
 [[Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+
+[[Distributions]]
+deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
+git-tree-sha1 = "6a8dc9f82e5ce28279b6e3e2cea9421154f5bd0d"
+uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
+version = "0.25.37"
 
 [[DocStringExtensions]]
 deps = ["LibGit2"]
@@ -268,6 +343,12 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.0+0"
+
+[[FillArrays]]
+deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
+git-tree-sha1 = "8756f9935b7ccc9064c6eef0bff0ad643df733a3"
+uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
+version = "0.12.7"
 
 [[FixedPointNumbers]]
 deps = ["Statistics"]
@@ -578,11 +659,21 @@ git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+0"
 
+[[OpenLibm_jll]]
+deps = ["Artifacts", "Libdl"]
+uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
+
 [[OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "15003dcb7d8db3c6c857fda14891a539a8f2705a"
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
 version = "1.1.10+0"
+
+[[OpenSpecFun_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "13652491f6856acfd2db29360e1bbcd4565d04f1"
+uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
+version = "0.5.5+0"
 
 [[Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -600,6 +691,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "b2a7af664e098055a7529ad1a900ded962bca488"
 uuid = "2f80f16e-611a-54ab-bc61-aa92de5b98fc"
 version = "8.44.0+0"
+
+[[PDMats]]
+deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
+git-tree-sha1 = "ee26b350276c51697c9c2d88a072b339f9f03d73"
+uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
+version = "0.11.5"
 
 [[Parsers]]
 deps = ["Dates"]
@@ -657,6 +754,12 @@ git-tree-sha1 = "ad368663a5e20dbb8d6dc2fddeefe4dae0781ae8"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
 version = "5.15.3+0"
 
+[[QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "78aadffb3efd2155af139781b8a8df1ef279ea39"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.4.2"
+
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
@@ -686,6 +789,18 @@ deps = ["UUIDs"]
 git-tree-sha1 = "8f82019e525f4d5c669692772a6f4b0a58b06a6a"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.2.0"
+
+[[Rmath]]
+deps = ["Random", "Rmath_jll"]
+git-tree-sha1 = "bf3188feca147ce108c76ad82c2792c57abe7b1f"
+uuid = "79098fc4-a85e-5d69-aa6a-4863f24498fa"
+version = "0.7.0"
+
+[[Rmath_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
+uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
+version = "0.3.0+0"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -722,6 +837,12 @@ version = "1.0.1"
 deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
+[[SpecialFunctions]]
+deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
+git-tree-sha1 = "e08890d19787ec25029113e88c34ec20cac1c91e"
+uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
+version = "2.0.0"
+
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
 git-tree-sha1 = "3c76dde64d03699e074ac02eb2e8ba8254d428da"
@@ -743,11 +864,21 @@ git-tree-sha1 = "2bb0cb32026a66037360606510fca5984ccc6b75"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.13"
 
+[[StatsFuns]]
+deps = ["ChainRulesCore", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "bedb3e17cc1d94ce0e6e66d3afa47157978ba404"
+uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
+version = "0.9.14"
+
 [[StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
 git-tree-sha1 = "2ce41e0d042c60ecd131e9fb7154a3bfadbf50d3"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 version = "0.6.3"
+
+[[SuiteSparse]]
+deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
+uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[TOML]]
 deps = ["Dates"]
@@ -1008,17 +1139,23 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
+# ╠═9c7f4855-7a32-40eb-bee9-bfcdf0defd98
 # ╟─3f015e30-6141-11ec-2426-8fe9b0fd9896
-# ╠═a8fb04bd-1425-44ab-a4bc-faf79fccc4af
+# ╠═77c4b466-f0f4-4f4e-81d8-5597b623b034
+# ╠═579a522a-ed0b-4d96-96c4-9b4627100b27
+# ╠═13fa12b5-04fe-4439-b410-64427157be73
+# ╟─8b62aae3-46f3-47f3-b526-6663eaf19aae
 # ╟─d8e89f3d-6358-436f-96d7-e255bde19c60
 # ╠═eb83fcda-95f1-4166-b851-5a3d0f090e4d
+# ╠═6df3c802-ae7c-4532-ab61-15d31257e514
 # ╠═10a7e2d8-180e-4072-97c9-26d8adb39690
 # ╟─0e771a6e-3374-43ef-ab3a-735a0f3982d1
-# ╠═9c7f4855-7a32-40eb-bee9-bfcdf0defd98
 # ╠═200f38e6-971a-4212-ae05-a68356db3d17
 # ╠═604109a4-e3fc-4d7f-aea0-643d8fd87c0e
 # ╟─877321e9-2e56-482c-956c-df442cc2ff9e
+# ╠═cac539cc-5acd-4385-8841-74533c914e28
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═41e81c55-0f20-4fae-aa7b-60239db2e807
+# ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
