@@ -148,7 +148,30 @@ begin
 end
 
 # ╔═╡ 877321e9-2e56-482c-956c-df442cc2ff9e
-gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], 
+	label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+
+# ╔═╡ b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
+md"
+
+A side note here: unnormalized bases decay out beyond [0, T] and don't include overlapping areas. So depending on the use case (continued motion) and proper adjustment to overlap, we may or may not keep this.
+
+"
+
+# ╔═╡ e9186b1d-75ca-47ce-8fdf-f617b63ab171
+let
+	g̃(b, t) = ψ(cs[b], t);
+	g̃(t)    = [g̃(b, t) for b ∈ 1:B];
+	g̃s = hcat(g̃.(0:0.001:T)...); plot(); [plot!(0:0.001:T, g̃s[b, :], 
+		label=latexstring("\$\\tilde{\\psi}_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+end
+
+# ╔═╡ 95b4ef3a-f678-40d3-9f69-a25ad9e3de77
+md"
+
+Continue with defining the cost function taking Theta.
+
+"
 
 # ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
 # TODO: define from matrix theta and change pseudocode above to now include mat Θ
@@ -157,8 +180,16 @@ J(Θ) = begin
 	return J̃(q̈s)
 end
 
+# ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
+function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
+	eigvals, eigvecs = eigen(Σ);
+	clamp!(eigvals, λₘᵢₙ, λₘₐₓ);
+	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real; # Σ = VΛV⁻¹
+end
+
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(; tol=1e-6)
+function PIᴮᴮ(Θᵢₙᵢₜ, Σᵢₙᵢₜ; tol=1e-6)
+	prev_cost = J(Θᵢₙᵢₜ); iter = 0;
 	# while abs(prevJ-J) > tol: keep on iterating.
 	# return (Θ=Θ, iter=iter)
 end
@@ -1153,7 +1184,11 @@ version = "0.9.1+5"
 # ╠═200f38e6-971a-4212-ae05-a68356db3d17
 # ╠═604109a4-e3fc-4d7f-aea0-643d8fd87c0e
 # ╟─877321e9-2e56-482c-956c-df442cc2ff9e
+# ╟─b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
+# ╟─e9186b1d-75ca-47ce-8fdf-f617b63ab171
+# ╟─95b4ef3a-f678-40d3-9f69-a25ad9e3de77
 # ╠═cac539cc-5acd-4385-8841-74533c914e28
+# ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═41e81c55-0f20-4fae-aa7b-60239db2e807
 # ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
