@@ -192,26 +192,30 @@ end
 function PIᴮᴮ(Θ, Σ; tol=1e-6, maxiter = 1000)
 	iter = 0; ΔJ̄ = J(Θ);
 	Jhist = [ΔJ̄];
+	Θs   = zeros(B, K, N); Ps = Js = zeros(K);
 	
 	while iter < maxiter && abs(ΔJ̄) > tol
-		iter += 1;
-		Θs   = zeros(B, K, N);
-		Js   = zeros(K, N);
+		iter += 1;	
 		for k ∈ 1:K
 			Θs[:, k, :] = hcat([rand(MvNormal(Θ[:, n], Σ[:, :, n])) for n ∈ 1:N]...);
-			Js[k, :] = J();
+			Js[k]       = J(Θs[:, k, :]);
 		end
-		Jₘᵢₙ = minimum.(Js |> eachcol); Jₘₐₓ = maximum.(Js |> eachcol);
-		Ps  = zeros(K, N);
-		den = sum([-h.*(Js[l, :]-Jₘᵢₙ)./(Jₘₐₓ-Jₘᵢₙ) for l ∈ 1:K]; dims = 2);
+		Jₘᵢₙ = minimum(Js); Jₘₐₓ = maximum(Js);
+		den = sum([exp(-h*(Js[l]-Jₘᵢₙ)/(Jₘₐₓ-Jₘᵢₙ)) for l ∈ 1:K]);
 		for k ∈ 1:K
-			Ps[k, :] = exp.(-h.*(Js[k, :]-Jₘᵢₙ)./(Jₘₐₓ-Jₘᵢₙ))./den;
+			Ps[k] = exp(-h*(Js[k]-Jₘᵢₙ)/(Jₘₐₓ-Jₘᵢₙ))/den;
 		end
+		Σ = zeros(B, B, N);
 		for n ∈ 1:N
-			Σ[k] = ; # todo
-			Σ[k] = boundcovar(Σ[k], λₘᵢₙ, λₘₐₓ);
+			for k ∈ 1:K 
+				Σ[:, :, n] += Ps[k]*(Θs[:, k, n]-Θ[:, n])*(Θs[:, k, n]-Θ[:, n])';
+			end
+			Σ[:, :, n] = boundcovar(Σ[:, :, n], λₘᵢₙ, λₘₐₓ);
 		end
-		Θ = [sum()]; # todo
+		Θ = zeros(B, N);
+		for k ∈ 1:K
+			Θ += Ps[k]*Θs[:, k, :];
+		end
 		push!(Jhist, J(Θ))
 		ΔJ̄ = last(Jhist, 5) |> mean;
 	end
