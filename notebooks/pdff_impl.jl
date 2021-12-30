@@ -184,18 +184,19 @@ J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T
 # ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
 	eigvals, eigvecs = eigen(Σ);
-	clamp!(eigvals, λₘᵢₙ, λₘₐₓ);
-	return eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real; # Σ = VΛV⁻¹
+	clamp!(abs.(eigvals), λₘᵢₙ, λₘₐₓ) .* sign.(eigvals);
+	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric # Σ = VΛV⁻¹
+	return Σ + 1e-6I # add ϵ to diag for numerical stability of cholesky factorization
 end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(Θ, Σ; tol=1e-6, maxiter = 1000)
+function PIᴮᴮ(Θ, Σ; tol=1e-2, maxiter = 100)
 	iter = 0; ΔJ̄ = J(Θ);
 	Jhist = [ΔJ̄];
 	Θs   = zeros(B, K, N); Ps = Js = zeros(K);
 	
 	while iter < maxiter && abs(ΔJ̄) > tol
-		iter += 1;	
+		iter += 1;
 		for k ∈ 1:K
 			Θs[:, k, :] = hcat([rand(MvNormal(Θ[:, n], Σ[:, :, n])) for n ∈ 1:N]...);
 			Js[k]       = J(Θs[:, k, :]);
@@ -227,7 +228,7 @@ end
 Θopt, opt_iters, cost_history = PIᴮᴮ(Θ, Σ)
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
-plot(cost_history; legend=false)
+plot(0:length(cost_history)-1, cost_history; legend=false)
 
 # ╔═╡ 03da8f0a-2dac-470b-b3a6-35083cb867e0
 # TODO: produce gif from q[:] history of final output from pdff
@@ -1222,7 +1223,7 @@ version = "0.9.1+5"
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
-# ╠═bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
+# ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 # ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
