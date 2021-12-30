@@ -76,11 +76,11 @@ kt = 1e-5; kT = 1e2;
 # ╔═╡ 6df3c802-ae7c-4532-ab61-15d31257e514
 begin
 	norm2(v::AbstractVector) = v'*v;
-	double_integrate(ẍ) = begin 
+	function double_integrate(ẍ) 
 		x = ẋ = zeros(size(ẍ)...);
 		for i ∈ 2:size(ẍ, 2) 
-			ẋ[i, :] = ẋ[i-1, :] + ẍ[i, :]*Δt;
-			x[i, :] = x[i-1, :] + ẋ[i, :]*Δt;
+			ẋ[:, i] = ẋ[:, i-1] + ẍ[:, i]*Δt;
+			x[:, i] = x[:, i-1] + ẋ[:, i]*Δt;
 		end
 		return x
 	end
@@ -88,12 +88,13 @@ end;
 
 # ╔═╡ 10a7e2d8-180e-4072-97c9-26d8adb39690
 begin
-	p²ₙ(q₁, q₂) = (x=l₂*cos(q₁+q₂) + l₁*cos(q₁), y=l₂*sin(q₁+q₂) + l₁*sin(q₁));
-	pₙ(q)  = length(q) == 2 && p²ₙ(q...);
+	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
+	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
+		throw(throw(AssertionError("dim(q) ≠ 2")));
 	q(q̈)   = double_integrate(q̈);
 	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
-	Cₜ(q)  = kT*norm2(pₙ(q[end]) - ʷpₜ) + maximum(q);
-	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈));
+	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
+	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol));
 end
 
 # ╔═╡ 0e771a6e-3374-43ef-ab3a-735a0f3982d1
@@ -128,6 +129,9 @@ The algorithm is as follows:
 
 "
 
+# ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
+# TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
+
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
 	λᵢₙᵢₜ = λₘᵢₙ = 0.05; λₘₐₓ = 5; # exploration levels; TODO: set λₘₐₓ acc. to need
@@ -137,7 +141,7 @@ begin
 	K = 20; h = 10;                # number of rollouts, K, and eliteness param, h
 end;
 
-# ╔═╡ 604109a4-e3fc-4d7f-aea0-643d8fd87c0e
+# ╔═╡ 943f5d35-dcc1-457c-a921-6d019e8203f1
 begin
 	ψ(c, t) = exp(-((t-c)/w)^2);
 	cs      = w + 0:2w:T;
@@ -149,7 +153,7 @@ end
 
 # ╔═╡ 877321e9-2e56-482c-956c-df442cc2ff9e
 gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], 
-	label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+	label=latexstring("\$g_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
 
 # ╔═╡ b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
 md"
@@ -163,7 +167,7 @@ let
 	g̃(b, t) = ψ(cs[b], t);
 	g̃(t)    = [g̃(b, t) for b ∈ 1:B];
 	g̃s = hcat(g̃.(0:0.001:T)...); plot(); [plot!(0:0.001:T, g̃s[b, :], 
-		label=latexstring("\$\\tilde{\\psi}_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+		label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
 end
 
 # ╔═╡ 95b4ef3a-f678-40d3-9f69-a25ad9e3de77
@@ -175,29 +179,51 @@ Continue with defining the cost function taking Theta.
 
 # ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
 # TODO: define from matrix theta and change pseudocode above to now include mat Θ
-J(Θ) = begin
-	q̈(t) = q̈(Θ, t); q̈s = hcat(q̈.(0:Δt:T)...);
-	return J̃(q̈s)
-end
+J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
 
 # ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
 	eigvals, eigvecs = eigen(Σ);
 	clamp!(eigvals, λₘᵢₙ, λₘₐₓ);
-	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real; # Σ = VΛV⁻¹
+	return eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real; # Σ = VΛV⁻¹
 end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(Θᵢₙᵢₜ, Σᵢₙᵢₜ; tol=1e-6)
-	prev_cost = J(Θᵢₙᵢₜ); iter = 0;
-	# while abs(prevJ-J) > tol: keep on iterating.
-	# return (Θ=Θ, iter=iter)
+function PIᴮᴮ(Θ, Σ; tol=1e-6, maxiter = 1000)
+	iter = 0; ΔJ̄ = J(Θ);
+	Jhist = [ΔJ̄];
+	
+	while iter < maxiter && abs(ΔJ̄) > tol
+		iter += 1;
+		Θs   = zeros(B, K, N);
+		Js   = zeros(K, N);
+		for k ∈ 1:K
+			Θs[:, k, :] = hcat([rand(MvNormal(Θ[:, n], Σ[:, :, n])) for n ∈ 1:N]...);
+			Js[k, :] = J();
+		end
+		Jₘᵢₙ = minimum.(Js |> eachcol); Jₘₐₓ = maximum.(Js |> eachcol);
+		Ps  = zeros(K, N);
+		den = sum([-h.*(Js[l, :]-Jₘᵢₙ)./(Jₘₐₓ-Jₘᵢₙ) for l ∈ 1:K]; dims = 2);
+		for k ∈ 1:K
+			Ps[k, :] = exp.(-h.*(Js[k, :]-Jₘᵢₙ)./(Jₘₐₓ-Jₘᵢₙ))./den;
+		end
+		for n ∈ 1:N
+			Σ[k] = ; # todo
+			Σ[k] = boundcovar(Σ[k], λₘᵢₙ, λₘₐₓ);
+		end
+		Θ = [sum()]; # todo
+		push!(Jhist, J(Θ))
+		ΔJ̄ = last(Jhist, 5) |> mean;
+	end
+	
+	return (Θ=Θ, iter=iter, hist=Jhist) # converged to (local) optimum
 end
 
-# ╔═╡ 41e81c55-0f20-4fae-aa7b-60239db2e807
-function PDFF() # takes input of starting and target config; runs and produces result
-	# return q̈(t)
-end
+# ╔═╡ 2dac5e67-a0e1-4633-abdc-996a625c5a23
+Θopt, opt_iters, cost_history = PIᴮᴮ(Θ, Σ)
+
+# ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
+plot(cost_history; legend=false)
 
 # ╔═╡ 03da8f0a-2dac-470b-b3a6-35083cb867e0
 # TODO: produce gif from q[:] history of final output from pdff
@@ -1181,8 +1207,9 @@ version = "0.9.1+5"
 # ╠═6df3c802-ae7c-4532-ab61-15d31257e514
 # ╠═10a7e2d8-180e-4072-97c9-26d8adb39690
 # ╟─0e771a6e-3374-43ef-ab3a-735a0f3982d1
+# ╠═7dec2c21-317d-4514-bd14-37ea606b2720
 # ╠═200f38e6-971a-4212-ae05-a68356db3d17
-# ╠═604109a4-e3fc-4d7f-aea0-643d8fd87c0e
+# ╠═943f5d35-dcc1-457c-a921-6d019e8203f1
 # ╟─877321e9-2e56-482c-956c-df442cc2ff9e
 # ╟─b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
 # ╟─e9186b1d-75ca-47ce-8fdf-f617b63ab171
@@ -1190,7 +1217,8 @@ version = "0.9.1+5"
 # ╠═cac539cc-5acd-4385-8841-74533c914e28
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
-# ╠═41e81c55-0f20-4fae-aa7b-60239db2e807
+# ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
+# ╠═bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 # ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
