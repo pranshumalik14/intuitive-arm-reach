@@ -76,8 +76,9 @@ kt = 1e-5; kT = 1e2;
 # ╔═╡ 6df3c802-ae7c-4532-ab61-15d31257e514
 begin
 	norm2(v::AbstractVector) = v'*v;
-	function double_integrate(ẍ) 
+	function double_integrate(ẍ, x₀) 
 		x = ẋ = zeros(size(ẍ)...);
+		x[:, 1] = x₀;
 		for i ∈ 2:size(ẍ, 2) 
 			ẋ[:, i] = ẋ[:, i-1] + ẍ[:, i]*Δt;
 			x[:, i] = x[:, i-1] + ẋ[:, i]*Δt;
@@ -91,7 +92,7 @@ begin
 	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
 	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
 		throw(throw(AssertionError("dim(q) ≠ 2")));
-	q(q̈)   = double_integrate(q̈);
+	q(q̈)   = double_integrate(q̈, qₛ);
 	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
 	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
 	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol));
@@ -131,6 +132,7 @@ The algorithm is as follows:
 
 # ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
 # TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
+# TODO: add info about nudge lim
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
@@ -145,8 +147,8 @@ end;
 begin
 	ψ(c, t) = exp(-((t-c)/w)^2);
 	cs      = w + 0:2w:T;
-	Σψ(t)   = sum([ψ(cs[b], t) for b ∈ 1:B])
-	g(b, t) = ψ(cs[b], t)/Σψ(t);
+	Ψ(t)    = [ψ(cs[b], t) for b ∈ 1:B]
+	g(b, t) = ψ(cs[b], t)/sum(Ψ(t));
 	g(t)    = [g(b, t) for b ∈ 1:B];
 	q̈(Θ, t) = Θ' * g(t);
 end
@@ -164,9 +166,7 @@ A side note here: unnormalized bases decay out beyond [0, T] and don't include o
 
 # ╔═╡ e9186b1d-75ca-47ce-8fdf-f617b63ab171
 let
-	g̃(b, t) = ψ(cs[b], t);
-	g̃(t)    = [g̃(b, t) for b ∈ 1:B];
-	g̃s = hcat(g̃.(0:0.001:T)...); plot(); [plot!(0:0.001:T, g̃s[b, :], 
+	Ψs = hcat(Ψ.(0:0.001:T)...); plot(); [plot!(0:0.001:T, Ψs[b, :], 
 		label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
 end
 
@@ -185,18 +185,21 @@ J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
 	eigvals, eigvecs = eigen(Σ);
 	clamp!(abs.(eigvals), λₘᵢₙ, λₘₐₓ) .* sign.(eigvals);
-	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric # Σ = VΛV⁻¹
+	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric; # Σ = VΛV⁻¹
 	return Σ + 1e-6I # add ϵ to diag for numerical stability of cholesky factorization
 end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
-	iter = 0; ΔJ̄ = J(Θ);
-	Jhist = [ΔJ̄];
+function PIᴮᴮ(Θ, Σ; tol=1e-3, nudgelim = 25, maxiter = 1000)
+	iter = 0; Σ₀ = Σ;
+	ΔJ̄   = J(Θ); Jhist = [ΔJ̄]; 
 	Θs   = zeros(B, K, N); Ps = Js = zeros(K);
 	
 	while iter < maxiter && abs(ΔJ̄) > tol
 		iter += 1;
+		if iter % nudgelim == 0
+			Σ = Σ₀;
+		end
 		for k ∈ 1:K
 			Θs[:, k, :] = hcat([rand(MvNormal(Θ[:, n], Σ[:, :, n])) for n ∈ 1:N]...);
 			Js[k]       = J(Θs[:, k, :]);
@@ -225,33 +228,22 @@ function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
 end
 
 # ╔═╡ 2dac5e67-a0e1-4633-abdc-996a625c5a23
-Θopt, opt_iters, cost_history = PIᴮᴮ(Θ, Σ)
+Θₒₚₜ, _, cost_hist = PIᴮᴮ(Θ, Σ)
 
-# ╔═╡ c4ef4214-23e3-4ae5-a36b-d93355639926
-md"
-
-The optimal (after running for very low tols) is:
-
-$$\Theta_\text{opt} = \begin{bmatrix}
-	28.346893220609353 & 242.63669925175475\\
- 	87.42066256344545 & 234.27018740118763\\
-  	12.77419135619995 & 92.63910918389347\\
-   	9.090643023169882 & 188.947292281042\\
-	52.51250871377594 & -12.515534031438918\\
- 	-17.344277814163107 & -27.802947738170104\\
-  	13.055655833434804 & 163.73012347326147\\
-   	51.476690205046275 & 211.176547987611\\
-	2.011006240484171 & -97.38063298091147\\
- 	14.675645257929888 & -63.6617666934383\\
-\end{bmatrix}$$
-
-"
+# ╔═╡ 4331dfe5-869c-4168-bc60-66d1937a056e
+# TODO: will probably have to penalize high matrix values to then regularize the cost trends
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
-plot(0:length(cost_history)-1, cost_history; legend=false)
+plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
 
-# ╔═╡ 03da8f0a-2dac-470b-b3a6-35083cb867e0
-# TODO: produce gif from q[:] history of final output from pdff
+# ╔═╡ 8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
+begin
+	qs = q(hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...))
+	anim = @animate for i = 1:size(qs, 2)
+			plot_env(l₁, l₂, qs[:, i]..., ʷpₜ...)
+		end
+	gif(anim, "pibb_demo.gif", fps = 7)
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1243,8 +1235,8 @@ version = "0.9.1+5"
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
-# ╟─c4ef4214-23e3-4ae5-a36b-d93355639926
+# ╠═4331dfe5-869c-4168-bc60-66d1937a056e
 # ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
-# ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
+# ╟─8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
