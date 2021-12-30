@@ -190,7 +190,7 @@ function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
 end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(Θ, Σ; tol=1e-2, maxiter = 100)
+function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
 	iter = 0; ΔJ̄ = J(Θ);
 	Jhist = [ΔJ̄];
 	Θs   = zeros(B, K, N); Ps = Js = zeros(K);
@@ -217,8 +217,8 @@ function PIᴮᴮ(Θ, Σ; tol=1e-2, maxiter = 100)
 		for k ∈ 1:K
 			Θ += Ps[k]*Θs[:, k, :];
 		end
-		push!(Jhist, J(Θ))
-		ΔJ̄ = last(Jhist, 5) |> mean;
+		push!(Jhist, J(Θ));
+		ΔJ̄ = last(Jhist, 5) |> diff |> mean;
 	end
 	
 	return (Θ=Θ, iter=iter, hist=Jhist) # converged to (local) optimum
@@ -226,6 +226,26 @@ end
 
 # ╔═╡ 2dac5e67-a0e1-4633-abdc-996a625c5a23
 Θopt, opt_iters, cost_history = PIᴮᴮ(Θ, Σ)
+
+# ╔═╡ c4ef4214-23e3-4ae5-a36b-d93355639926
+md"
+
+The optimal (after running for very low tols) is:
+
+$$\Theta_\text{opt} = \begin{bmatrix}
+	28.346893220609353 & 242.63669925175475\\
+ 	87.42066256344545 & 234.27018740118763\\
+  	12.77419135619995 & 92.63910918389347\\
+   	9.090643023169882 & 188.947292281042\\
+	52.51250871377594 & -12.515534031438918\\
+ 	-17.344277814163107 & -27.802947738170104\\
+  	13.055655833434804 & 163.73012347326147\\
+   	51.476690205046275 & 211.176547987611\\
+	2.011006240484171 & -97.38063298091147\\
+ 	14.675645257929888 & -63.6617666934383\\
+\end{bmatrix}$$
+
+"
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 plot(0:length(cost_history)-1, cost_history; legend=false)
@@ -1223,6 +1243,7 @@ version = "0.9.1+5"
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
+# ╟─c4ef4214-23e3-4ae5-a36b-d93355639926
 # ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 # ╠═03da8f0a-2dac-470b-b3a6-35083cb867e0
 # ╟─00000000-0000-0000-0000-000000000001
