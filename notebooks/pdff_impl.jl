@@ -133,7 +133,7 @@ The algorithm is as follows:
 
 # ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
 # TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
-# TODO: add info about nudge limit
+# TODO: define from matrix theta and change pseudocode above to now include mat Θ
 # TODO: for training data, we can use nearby points as warm starts and explore outwords like that; many starts to one goal, then many goals from one start (both paradigms to use the same methodology)
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
@@ -180,28 +180,23 @@ Continue with defining the cost function taking Theta.
 "
 
 # ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
-# TODO: define from matrix theta and change pseudocode above to now include mat Θ
 J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
 
 # ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
 	eigvals, eigvecs = eigen(Σ);
-	clamp!(abs.(eigvals), λₘᵢₙ, λₘₐₓ) .* sign.(eigvals);
+	@. eigvals = clamp(abs(eigvals), λₘᵢₙ, λₘₐₓ) * sign(eigvals);
 	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric; # Σ = VΛV⁻¹
 	return Σ + 1e-6I # add ϵ to diag for numerical stability of cholesky factorization
 end
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
-function PIᴮᴮ(Θ, Σ; tol=1e-3, nudgelim = 25, maxiter = 1000)
-	iter = 0; Σ₀ = Σ;
-	ΔJ̄   = J(Θ); Jhist = [ΔJ̄]; 
+function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
+	iter = 0; ΔJ̄ = J(Θ); Jhist = [ΔJ̄];
 	Θs   = zeros(B, K, N); Ps = Js = zeros(K);
 	
 	while iter < maxiter && abs(ΔJ̄) > tol
 		iter += 1;
-		if iter % nudgelim == 0
-			Σ = Σ₀;
-		end
 		for k ∈ 1:K
 			Θs[:, k, :] = hcat([rand(MvNormal(Θ[:, n], Σ[:, :, n])) for n ∈ 1:N]...);
 			Js[k]       = J(Θs[:, k, :]);
@@ -231,9 +226,6 @@ end
 
 # ╔═╡ 2dac5e67-a0e1-4633-abdc-996a625c5a23
 Θₒₚₜ, _, cost_hist = PIᴮᴮ(Θ, Σ)
-
-# ╔═╡ 4331dfe5-869c-4168-bc60-66d1937a056e
-# TODO: will probably have to penalize high matrix values to then regularize the cost trends
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
@@ -1236,7 +1228,6 @@ version = "0.9.1+5"
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
-# ╠═4331dfe5-869c-4168-bc60-66d1937a056e
 # ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
 # ╟─8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
 # ╟─00000000-0000-0000-0000-000000000001
