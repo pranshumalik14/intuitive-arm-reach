@@ -76,10 +76,11 @@ kt = 1e-5; kT = 1e2;
 # ╔═╡ 6df3c802-ae7c-4532-ab61-15d31257e514
 begin
 	norm2(v::AbstractVector) = v'*v;
-	function double_integrate(ẍ, x₀) 
+	function double_integrate(ẍ, x₀, ẋ₀) # ∫∫ẍdt where ẍ is a N×T matrix 
+		@assert ndims(ẍ) == 2 && size(ẍ, 2) > 1
 		x = ẋ = zeros(size(ẍ)...);
-		x[:, 1] = x₀;
-		for i ∈ 2:size(ẍ, 2) 
+		ẋ[:, 1] = ẋ₀; x[:, 1] = x₀; 
+		for i ∈ 2:size(ẍ, 2)
 			ẋ[:, i] = ẋ[:, i-1] + ẍ[:, i]*Δt;
 			x[:, i] = x[:, i-1] + ẋ[:, i]*Δt;
 		end
@@ -92,7 +93,7 @@ begin
 	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
 	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
 		throw(throw(AssertionError("dim(q) ≠ 2")));
-	q(q̈)   = double_integrate(q̈, qₛ);
+	q(q̈)   = double_integrate(q̈, qₛ, zeros(N));
 	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
 	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
 	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol));
