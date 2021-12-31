@@ -92,7 +92,7 @@ end;
 begin
 	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
 	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
-		throw(throw(AssertionError("dim(q) ≠ 2")));
+		throw(AssertionError("dim(q) ≠ 2"));
 	q(q̈)   = double_integrate(q̈, qₛ, zeros(N));
 	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
 	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
@@ -133,7 +133,8 @@ The algorithm is as follows:
 
 # ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
 # TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
-# TODO: add info about nudge lim
+# TODO: add info about nudge limit
+# TODO: for training data, we can use nearby points as warm starts and explore outwords like that; many starts to one goal, then many goals from one start (both paradigms to use the same methodology)
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
@@ -240,10 +241,9 @@ plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
 # ╔═╡ 8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
 begin
 	qs = q(hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...))
-	anim = @animate for i = 1:size(qs, 2)
-			plot_env(l₁, l₂, qs[:, i]..., ʷpₜ...)
-		end
-	gif(anim, "pibb_demo.gif", fps = 7)
+	@gif for i = 1:size(qs, 2)
+		plot_env(l₁, l₂, qs[:, i]..., ʷpₜ...)
+	end
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
