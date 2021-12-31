@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# demo gifs (unless manually added)
+*.gif
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
