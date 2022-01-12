@@ -25,40 +25,63 @@ This is a template; can easily generalize to N-DOF and non-planar. Limited by FK
 "
 
 # ╔═╡ 77c4b466-f0f4-4f4e-81d8-5597b623b034
-T = 1; N = 2; Δt = 1e-2; # dur of motion, T, num joints, N, and discrete interval, Δt
+T = 1; N = 3; Δt = 1e-2; # dur of motion, T, num joints, N, and discrete interval, Δt
 
 # ╔═╡ 579a522a-ed0b-4d96-96c4-9b4627100b27
-l₁ = 0.8; l₂ = 0.5;      # arm link lengths
+L = [0.6, 0.3, 0.1];     # arm link lengths (starting from the base)
 
 # ╔═╡ 13fa12b5-04fe-4439-b410-64427157be73
 begin
-	qₛ  = [π/8, π/4];    # starting joint configuration
-	ʷpₜ = [0.3, 0.7];    # x, y of target location
+	qₛ  = [π/8, π/4, π/5]; # starting joint configuration
+	ʷpₜ = [-0.3, -0.9];      # x, y of target location (2D plane only)
 end;
+
+# ╔═╡ cc358c88-32c3-4673-86e1-40b8b7d9e67a
+begin
+	function FK(q, n) # x, y for an intermediate link tip
+		x = 0; y = 0; qsum = 0;
+		for  i ∈ 1:n
+			qsum += q[i];
+			x    += L[i]*cos(qsum);
+			y    += L[i]*sin(qsum);
+		end
+		return [x, y]
+	end
+	function FK(q)    # x, y for all link tips (starting from the base)
+		xs = zeros(N+1); ys = zeros(N+1); qsum = 0;
+		for i ∈ 1:N
+			qsum   += q[i];
+			xs[i+1] = xs[i] + L[i]*cos(qsum);
+			ys[i+1] = ys[i] + L[i]*sin(qsum);
+		end
+		return [xs, ys]
+	end
+end
 
 # ╔═╡ 8b62aae3-46f3-47f3-b526-6663eaf19aae
 begin
-	function plot_arm(l₁, l₂, q₁, q₂; alpha=1.0)
-		x = [0, l₁*cos(q₁), l₂*cos(q₁+q₂) + l₁*cos(q₁)]
-		y = [0, l₁*sin(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)]
-		plot(x, y; xlims=(-(l₁+l₂), l₁+l₂), ylims=(-(l₁+l₂), l₁+l₂), linewidth=5, 
+	function plot_arm(L, q; alpha=1.0)
+		x, y = FK(q)
+		lmax = sum(L)
+		plot(x, y; xlims=(-lmax, lmax), ylims=(-lmax, lmax), linewidth=5, 
 			legend=false, aspect_ratio=:equal, alpha=alpha)
+		scatter!(x[1:end-1], y[1:end-1]; markercolor="orange", markersize=3,
+			markershape=:circle)
 	end
-	function plot_target(xₜ, yₜ)
-		scatter!([xₜ], [yₜ]; markercolor="orange", markersize=7, markershape=:star5)
+	function plot_target(pₜ)
+		scatter!(pₜ[1, :], pₜ[2, :]; markercolor="yellow", markersize=7,
+			markershape=:star5)
 	end
 	function plot_base()
 		scatter!([0], [-0.04]; markercolor="grey", markersize=7, 
 			markershape=:utriangle)
 	end
-	function plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ)
-		plot_arm(l₁, l₂, q₁, q₂)
-		xₛ = l₂*cos(q₁+q₂) + l₁*cos(q₁)
-		yₛ = l₂*sin(q₁+q₂) + l₁*sin(q₁)
-		plot_target(xₜ, yₜ)
+	function plot_env(L, q, pₜ)
+		plot_arm(L, q)
+		plot_target(pₜ)
 		plot_base()
 	end
-	plot_env(l₁, l₂, qₛ..., ʷpₜ...)
+	plot_env(L, qₛ, ʷpₜ)
 end
 
 # ╔═╡ d8e89f3d-6358-436f-96d7-e255bde19c60
@@ -78,8 +101,8 @@ begin
 	norm2(v::AbstractVector) = v'*v;
 	function double_integrate(ẍ, x₀, ẋ₀) # ∫∫ẍdt where ẍ is a N×T matrix 
 		@assert ndims(ẍ) == 2 && size(ẍ, 2) > 1
-		x = ẋ = zeros(size(ẍ)...);
-		ẋ[:, 1] = ẋ₀; x[:, 1] = x₀; 
+		x = zeros(size(ẍ)...); ẋ = zeros(size(ẍ)...); 
+		x[:, 1] = x₀; ẋ[:, 1] = ẋ₀;
 		for i ∈ 2:size(ẍ, 2)
 			ẋ[:, i] = ẋ[:, i-1] + ẍ[:, i]*Δt;
 			x[:, i] = x[:, i-1] + ẋ[:, i]*Δt;
@@ -90,13 +113,11 @@ end;
 
 # ╔═╡ 10a7e2d8-180e-4072-97c9-26d8adb39690
 begin
-	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
-	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
-		throw(AssertionError("dim(q) ≠ 2"));
+	pₙ(q)  = FK(q, N);
 	q(q̈)   = double_integrate(q̈, qₛ, zeros(N));
-	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
+	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N]);
 	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
-	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol));
+	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol))/sum([(N+1-n) for n ∈ 1:N]);
 end
 
 # ╔═╡ 0e771a6e-3374-43ef-ab3a-735a0f3982d1
@@ -135,6 +156,7 @@ The algorithm is as follows:
 # TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
 # TODO: define from matrix theta and change pseudocode above to now include mat Θ
 # TODO: for training data, we can use nearby points as warm starts and explore outwords like that; many starts to one goal, then many goals from one start (both paradigms to use the same methodology)
+# TODO: show learnt accelration profiles!!!!
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
@@ -149,7 +171,7 @@ end;
 begin
 	ψ(c, t) = exp(-((t-c)/w)^2);
 	cs      = w + 0:2w:T;
-	Ψ(t)    = [ψ(cs[b], t) for b ∈ 1:B]
+	Ψ(t)    = [ψ(cs[b], t) for b ∈ 1:B];
 	g(b, t) = ψ(cs[b], t)/sum(Ψ(t));
 	g(t)    = [g(b, t) for b ∈ 1:B];
 	q̈(Θ, t) = Θ' * g(t);
@@ -180,7 +202,7 @@ Continue with defining the cost function taking Theta.
 "
 
 # ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
-J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
+J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃ # J = J̃(q̈(Θ), 0:Δt:T)
 
 # ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
@@ -234,7 +256,7 @@ plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
 begin
 	qs = q(hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...))
 	@gif for i = 1:size(qs, 2)
-		plot_env(l₁, l₂, qs[:, i]..., ʷpₜ...)
+		plot_env(L, qs[:, i], ʷpₜ)
 	end
 end
 
@@ -722,9 +744,9 @@ uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 
 [[Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
+git-tree-sha1 = "887579a3eb005446d514ab7aeac5d1d027658b8f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
-version = "1.3.5+0"
+version = "1.3.5+1"
 
 [[OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1211,6 +1233,7 @@ version = "0.9.1+5"
 # ╠═77c4b466-f0f4-4f4e-81d8-5597b623b034
 # ╠═579a522a-ed0b-4d96-96c4-9b4627100b27
 # ╠═13fa12b5-04fe-4439-b410-64427157be73
+# ╠═cc358c88-32c3-4673-86e1-40b8b7d9e67a
 # ╟─8b62aae3-46f3-47f3-b526-6663eaf19aae
 # ╟─d8e89f3d-6358-436f-96d7-e255bde19c60
 # ╠═eb83fcda-95f1-4166-b851-5a3d0f090e4d
