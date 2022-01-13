@@ -76,9 +76,9 @@ md"
 
 ## $$\text{PI}^\text{BB}$$: Blackbox Stochastic Optimization
 
-The control policy for the motion of the robot encodes the reach trajectory in a time-activation representation per arm joint. The policy is completely specified by the parameter vectors per joint, that act as weights for the time-shifted Gaussian basis functions representing joint acceleration over time. This policy is optimized by the $$\text{PI}^\text{BB}$$ algorithm, which is the suggested in the study, and is based on the covariance matrix adaptation technique.
+The control policy for the motion of the robot encodes the reach trajectory in a time-activation representation per arm joint. The policy is completely specified by the parameter vectors per joint, that act as weights for $$B$$ number of time-shifted Gaussian basis functions representing joint acceleration over time. This policy is optimized by the $$\text{PI}^\text{BB}$$ algorithm, which is suggested in the study and is based on the covariance matrix adaptation technique.
 
-We now implement this algorithm, but with minor changes. Specfically, we have bundled the individual parameter vectors (per joint) into one matrix over which all computations take place; same goes for the covariance matrices. Furthermore, here we have defined the cost convergence check (stopping crtierion) to return true when the mean of last five cost differences is less than the user-specified tolerance. Our version of the $$\text{PI}^\text{BB}$$ algorithm is given below.
+We now implement this algorithm, but with minor changes. Specifically, we have bundled the individual parameter vectors (per joint) into one matrix over which all computations take place; the same goes for the covariance matrices. Furthermore, here we have defined the cost convergence check (stopping criterion) to return true when the mean of the last five cost differences is less than the user-specified tolerance. Our version of the $$\text{PI}^\text{BB}$$ algorithm is given below.
 
 > **inputs:**
 > - initial parameter matrix $$\Theta_\text{init}$$ 
@@ -113,30 +113,36 @@ We now implement this algorithm, but with minor changes. Specfically, we have bu
 # ╔═╡ dceb70eb-b564-46cd-8dd0-9e9ef82aae5a
 md"
 
-We start with defining the parameters in the algorithm, namely the movement control policy which is the linear combination of $$B$$ scaled basis functions. Each basis is defined as a Guassian. time-activation representation.
+Given a particular parameter matrix $$\Theta$$ during the iterative search in $$\text{PI}^{\text{BB}}$$, we get the corresponding joint accelerations by the following transformation,
 
-g(t) ∈ RB is a vector of equally-spaced, time-dependent, and normalized radial-basis functions that together describe the joint space trajectory of each joint when scaled by the respective weights.
-q¨(t) = g(t)Θ 
-[g(t)]b = B ψb(t)
-b=1 ψb(t)
-ψb(t) = exp − 
-(t − cb)2 w2
-
-.
+$$\ddot{\mathbf{q}}(t) = \Theta^\intercal \mathbf{g}(t),$$
+
+where $$\mathbf{g}(t) ∈ \mathbb{R}^B$$ is a vector of equally-spaced and normalized Gaussian-basis functions that together describe the joint space trajectory of each joint when scaled by the respective weights. Note that we constrain the number $$B$$ for suitable control over joint acceleration profiles. Larger $$B$$ implies finer control over joint trajectories, but also extra computation. The basis functions with widths $$w$$ and centers $$c_b$$ are given by,
+
+$$g_b(t) = \frac{\psi_b(t)}{\sum_{b=1}^{B}\psi_b(t)}, \text{ where } \psi_b(t) = \exp\left(-\frac{(t-c_b)^2}{w^2}\right).$$
+
+Below, we start with setting these parameters and functions for the algorithm and control policy.
+
+"
+
+# ╔═╡ 3a1df77f-5620-468a-989e-082a34bc10ba
+md"
+
+The equally spaced un-normalized Gaussian functions $$\psi_b(t)$$ are shown below.
 
 "
 
 # ╔═╡ b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
 md"
 
-A side note here: unnormalized bases decay out beyond [0, T] and don't include overlapping areas. So depending on the use case (continued motion) and proper adjustment to overlap, we may or may not keep this.
+Note that the un-normalized bases decay beyond $$t \in[0, T]$$ and do not account for the overlapping areas. On the other hand, the normalized bases do account for overlaps and plateau at $$1$$ beyond the duration of reach motion, as shown below.
 
 "
 
 # ╔═╡ 95b4ef3a-f678-40d3-9f69-a25ad9e3de77
 md"
 
-Continue with defining the cost function taking Theta after which we implement the $$\text{PI}^{\text{BB}}$$ algorithm.
+We can now define the rollout evaluation cost function required in $$\text{PI}^{\text{BB}}$$ after which we continue by implementing that algorithm and its components.
 
 "
 
@@ -151,12 +157,30 @@ end
 # ╔═╡ 7fa49867-3d71-493e-9fcb-b1d6ffa64a47
 md"
 
-We run the algorithm below.
+We now run the above optimization algorithm on our reach problem.
 
 "
 
-# ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
-# TODO: show learnt accelration profiles!!!! and the joint angle evolution in sep graphs
+# ╔═╡ fb680a98-01ec-44ad-945f-2b3a2f7464d0
+md"
+
+The following simulation shows the reach action.
+
+"
+
+# ╔═╡ 3bf7c9bb-89f0-4f19-9ed3-ad42dd34f042
+md"
+
+The optimal joint accelerations arrived at by $$\text{PI}^{\text{BB}}$$ are shown below. We also show the resulting joint angle evolutions.
+
+"
+
+# ╔═╡ c8017f58-8e11-48f6-9f53-d18a985b9c37
+md"
+
+Note that the final joint angles determine the joint configuration needed to reach the target. Hence, in essence, $$\text{PI}^{\text{BB}}$$ has solved the inverse kinematics problem, which we confirm below.
+
+"
 
 # ╔═╡ f077a358-7b84-447e-8740-aae45c399829
 macro multidef(ex)
@@ -315,15 +339,30 @@ end
 Θₒₚₜ, _, cost_hist = PIᴮᴮ(Θ, Σ)
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
-plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
+plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History", ylabel=L"J(\Theta)", xlabel="Iterations")
 
 # ╔═╡ 8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
 begin
 	qs = q(hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...))
 	@gif for i = 1:size(qs, 2)
 		plot_env(L, qs[:, i], ʷpₜ)
+		plot!(; title="Optimal Reach Action")
 	end
 end
+
+# ╔═╡ 7169d4da-1141-42a9-891f-9b1ec09f08d9
+qddₒₚₜ = hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...); plot(); [plot!(0:Δt:T, qddₒₚₜ[n, :], 
+	label=latexstring("\$\\ddot{q}_{$(n)}(t)\$")) for n ∈ 1:N]; plot!(; title=L"\ddot{\mathbf{q}}_{opt}(t)", xlabel=L"t", ylabel="Joint Acceleration [rad/s²]", legend=:bottomleft) |> as_svg
+
+# ╔═╡ 1b57bb30-461d-437e-9e25-4d16e4f0ff7c
+qₒₚₜ = qddₒₚₜ |> q; plot(); [plot!(0:Δt:T, qₒₚₜ[n, :], 
+	label=latexstring("\$q_{$(n)}(t)\$")) for n ∈ 1:N]; plot!(; title=L"\mathbf{q}_{opt}(t)", xlabel=L"t", ylabel="Joint Angle [rad]", legend=:topleft) |> as_svg
+
+# ╔═╡ 5e1c82a6-748c-49f0-8bca-17c3c187d2f7
+FK(qₒₚₜ[:, end]) # [xs, ys]; note the last entries match the target location (approx.)
+
+# ╔═╡ 844a2f76-a98c-4859-b8e3-c2ccfdccac82
+plot_env(L, qₒₚₜ[:, end], ʷpₜ); plot!(title="Reach-Task Completion")
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1306,9 +1345,10 @@ version = "0.9.1+5"
 # ╠═6df3c802-ae7c-4532-ab61-15d31257e514
 # ╠═10a7e2d8-180e-4072-97c9-26d8adb39690
 # ╟─0e771a6e-3374-43ef-ab3a-735a0f3982d1
-# ╠═dceb70eb-b564-46cd-8dd0-9e9ef82aae5a
+# ╟─dceb70eb-b564-46cd-8dd0-9e9ef82aae5a
 # ╠═200f38e6-971a-4212-ae05-a68356db3d17
 # ╠═943f5d35-dcc1-457c-a921-6d019e8203f1
+# ╟─3a1df77f-5620-468a-989e-082a34bc10ba
 # ╟─e9186b1d-75ca-47ce-8fdf-f617b63ab171
 # ╟─b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
 # ╟─877321e9-2e56-482c-956c-df442cc2ff9e
@@ -1317,10 +1357,16 @@ version = "0.9.1+5"
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
 # ╟─7fa49867-3d71-493e-9fcb-b1d6ffa64a47
-# ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
 # ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
+# ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
+# ╟─fb680a98-01ec-44ad-945f-2b3a2f7464d0
 # ╟─8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
-# ╠═7dec2c21-317d-4514-bd14-37ea606b2720
+# ╟─3bf7c9bb-89f0-4f19-9ed3-ad42dd34f042
+# ╟─7169d4da-1141-42a9-891f-9b1ec09f08d9
+# ╟─1b57bb30-461d-437e-9e25-4d16e4f0ff7c
+# ╟─c8017f58-8e11-48f6-9f53-d18a985b9c37
+# ╠═5e1c82a6-748c-49f0-8bca-17c3c187d2f7
+# ╟─844a2f76-a98c-4859-b8e3-c2ccfdccac82
 # ╟─f077a358-7b84-447e-8740-aae45c399829
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
