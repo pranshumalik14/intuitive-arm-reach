@@ -88,7 +88,7 @@ We now implement this algorithm, but with minor changes. Specifically, we have b
 > - eliteness parameter: $$h$$
 > **procedure:**
 > - let $$\Theta = \Theta_\text{init}$$
-> - let $$\mathbf{\Sigma} = [\lambda_\text{init}\mathbf{I}]_{i=1}^{n}$$ $$\triangleright$$ *3D stacked covariance matrix*
+> - let $$\mathbf{\Sigma} = [\lambda_\text{init}\mathbf{I}]_{i=1}^{N}$$ $$\triangleright$$ *3D stacked covariance matrix*
 > - **while** cost not converged **do**
 >   - *Exploration: sample parameters*
 >   - **foreach** $$k$$ in $$K$$ **do**
