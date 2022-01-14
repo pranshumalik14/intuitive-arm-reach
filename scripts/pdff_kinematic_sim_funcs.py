@@ -1,21 +1,16 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from numpy import linalg as LA
 import matplotlib.animation as animation
 from collections import deque
+import time
 
-class RobotArm2D:
-    def __init__(self, n_dims = 2, arm_length = 0.8, rel_link_lengths = np.array([2, 0.6, 0.4, 0.15, 0.15, 0.1])):
-        self.n_dims = n_dims
-        self.arm_length = arm_length
-        self.link_lengths = arm_length/sum(rel_link_lengths) * rel_link_lengths[0:n_dims+1]
-        # np.array([1.5, 1.25, 0.4, 0.15, 0.15, 0.1])
+from robot_arm_2D import RobotArm2D, angles_to_link_positions_2D
+from task_info_2D import numpy_linspace, TaskInfo2D
+from cost_functions import cost_function
+from PIBB_helper import qdotdot_gen
 
-    def get_arm_params(self):
-        return self.n_dims, self.arm_length, self.link_lengths
-
-
-
-def get_traj(qdotdot, robot_arm, dt = 0.05, init_condit = [None, None]):
+def get_traj(qdotdot, robot_arm, dt, init_condit = [None, None]):
     """
     Takes in a joint accelerations qdotdot, and return 
     
@@ -61,36 +56,7 @@ def get_traj(qdotdot, robot_arm, dt = 0.05, init_condit = [None, None]):
     return time_steps, q, qdot, qdotdot
 
 
-def angles_to_link_positions_2D(q, robot_arm):
-    # Forward kinematics
-    n_time_steps = q.shape[0]
-    n_dims = q.shape[1]
-    
-    n_dims_robot, arm_length, link_lengths = robot_arm.get_arm_params()
-    assert(n_dims == n_dims_robot)
-    
-    links_x = np.zeros((n_time_steps, n_dims+1))
-    links_y = np.zeros((n_time_steps, n_dims+1))
-    
-    for t in range(n_time_steps):
-        sum_angles = 0
-        
-        for i_dim in range(n_dims):
-            sum_angles += q[t, i_dim]
-            links_x[t, i_dim + 1] = links_x[t, i_dim] + np.cos(sum_angles) * link_lengths[i_dim]
-            links_y[t, i_dim + 1] = links_y[t, i_dim] + np.sin(sum_angles) * link_lengths[i_dim]
-            
-    link_positions = np.zeros((n_time_steps, 2*(n_dims+1)))
-    # desired structure of link positions is x y x y x y 
-    # (first x y are for the base joint)
-    for n in range(n_dims + 1):
-        link_positions[:, 2*n] = links_x[:,n]
-        link_positions[:, 2*n+1] = links_y[:,n]
-    
-    return link_positions
-
-
-def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit = [None, None], dt = 0.005):
+def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit, dt):
     """
     
     """
@@ -99,6 +65,7 @@ def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit = [None, None]
     
     # Get q and qdot
     time_steps, q, qdot, qdotdot = get_traj( qdotdot, robot_arm, init_condit = init_condit, dt = dt)
+    n_time_steps = len(time_steps)
     
     # Forward kinematics
     link_positions = angles_to_link_positions_2D(q, robot_arm)
@@ -176,7 +143,8 @@ def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit = [None, None]
         return line, trace, time_text
 
     ani = animation.FuncAnimation(
-        fig, animate, n_time_steps, interval = dt* n_time_steps, blit= True)
+        fig, animate, n_time_steps, interval = dt* n_time_steps, blit= True
+    )
     
     # Goal position
     plt.plot(x_goal[0], x_goal[1], '-o') # Goal position
@@ -185,4 +153,154 @@ def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit = [None, None]
     fig.suptitle('Kinematic Simulation', fontsize=14)
     
     return time_steps, q, qdot, qdotdot, ani
+
+
+def eval_rollout(task_info, Theta_matrix, init_condit):   
+    T = task_info.get_T()     
+    dt = task_info.get_dt()  
+    robot_arm = task_info.get_robot_arm_2D()
+    target_xy = task_info.get_target_xy()
     
+    # J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
+    gen_qdotdot = np.array(
+        [qdotdot_gen(task_info, Theta_matrix, t) for t in numpy_linspace(0, T, dt)]
+    )
+    
+    _, gen_q, _, _ = get_traj(gen_qdotdot, robot_arm, dt, init_condit)
+    return cost_function(target_xy, gen_q, gen_qdotdot, robot_arm)
+
+def boundcovar(Sigma, lambda_min, lambda_max):
+    eigvals, eigvecs = LA.eig(Sigma)   
+    eigvals = np.clip(np.abs(eigvals), lambda_min, lambda_max) * np.sign(eigvals)
+    Sigma = eigvecs * eigvals*np.eye(len(eigvals)) * LA.inv(eigvecs)
+    
+    return Sigma + 1e-6*np.eye(len(eigvals))
+    # https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
+
+def PIBB(task_info, Theta, Sigma, init_condit, tol = 1e-3, max_iter = 1000):
+    print("######################### PIBB Algorithm Started #########################")
+    start_time = time.time()
+    
+    robot_arm_2D = task_info.get_robot_arm_2D() 
+    lambda_min = task_info.get_lambda_min()
+    lambda_max = task_info.get_lambda_max()
+    
+    B = task_info.get_B()
+    K = task_info.get_K()    
+    N = task_info.get_N()    
+    T = task_info.get_T()    
+    h = task_info.get_h()    
+    dt = task_info.get_dt()    
+    w = task_info.get_w()    
+    cs = task_info.get_cs()
+    
+    iter_count = 0
+    delta_J = eval_rollout(task_info, Theta, init_condit)
+    J_hist = [delta_J]
+
+    Thetas = np.zeros(B * K * N).reshape((B, K, N))
+    Ps = Js = np.zeros(K)
+    
+    while (iter_count < max_iter) and (abs(delta_J) > tol):
+        iter_count += 1
+        
+#         print("######################### ITER COUNT: {} #########################".format(iter_count))
+        
+        # Sigma shape is N, B, B
+        # Theta shape is B, N
+        
+        for k in range(K):
+            
+            Thetas[: , k, : ] = np.array(
+                [np.random.multivariate_normal(Theta[: , n], Sigma[n, : , :]) for n in range(N)]
+            ).transpose()
+
+            Js[k] = eval_rollout(task_info, Thetas[: , k, : ], init_condit)
+            
+        J_min = np.min(Js)
+        J_max = np.max(Js)
+
+        den = sum([np.exp(-h * (Js[l] - J_min) / (J_max - J_min)) for l in range(K)])
+        for k in range(K):
+            Ps[k] = np.exp(-h * (Js[k] - J_min) / (J_max - J_min)) / den
+        
+        Sigma = np.zeros(B * B * N).reshape((N, B, B))
+
+        for n in range(N):
+            for k in range(K):        
+                
+                x = Ps[k] * \
+                    np.matmul(
+                        np.array([ (Thetas[:, k, n] - Theta[:, n]) ]).transpose(),
+                        np.array([ (Thetas[:, k, n] - Theta[:, n]) ])
+                    )
+                Sigma[n, : , :] += x
+                
+            Sigma[n, : , :] = boundcovar(Sigma[n, : , :], lambda_min, lambda_max)
+
+        Theta = np.zeros(B * N).reshape((B, N))
+
+        for k in range(K):
+            Theta += (Ps[k] * Thetas[: , k, : ])
+
+        J_hist.append(eval_rollout(task_info, Theta, init_condit))
+
+        last_5_J = J_hist[-5: ]# is safe
+        # function(works even when no of elements is less than 5)
+        delta_J = np.mean(np.diff(last_5_J))
+    
+    print("######################### PIBB Algorithm Finished. Time Elapsed : {} #########################".format(time.time() - start_time))
+    return Theta, iter_count, J_hist
+
+
+def gen_theta(x_target, init_condit, robot_arm):
+    """
+    
+    """
+    lambda_init = lambda_min = 0.05; lambda_max = 5; # exploration levels; TODO: set λₘₐₓ acc. to need
+    # Sample data
+    B = 10
+    K = 20
+    N, _, _ = robot_arm.get_params() 
+
+
+    Sigma_matrix = np.array( [lambda_init*np.eye(B) for i in range(N)] )
+
+    # Shape should be B * B * N but we have N * B * B -> indexing has to change accordingly
+    Theta_matrix = np.zeros(B*N).reshape((B,N));               # no default action to start with
+
+    task_info = TaskInfo2D(
+        robotarm = robot_arm,
+        lambda_min = lambda_min,
+        lambda_max = lambda_max,
+        B = B,
+        K = K,
+        N = N,
+        T = 1,
+        h = 10,
+        target_xy = x_target,
+        dt = 1e-2
+    )
+
+    Theta, iter_count, J_hist = PIBB(task_info, Theta_matrix, Sigma_matrix, init_condit)
+
+    return Theta, J_hist[-1]
+    
+    """
+    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t) for t in numpy_linspace(0, 1, 1e-2)]  )
+    time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate(gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
+    plt.show()
+    """
+    
+def training_data_gen(robot_arm):
+    N, robot_arm_length, link_lengths = robot_arm.get_arm_params()
+
+    x_target = np.array([-0.3, 0.3]) # a function that generates a point within the robot_arm_length circle radius
+    init_condit = [np.array([np.pi/8, np.pi/4, np.pi/5]), np.array([0, 0, 0])]
+
+if __name__ == '__main__':
+    robot_arm = RobotArm2D(
+        n_dims = 3,
+        arm_length = 1.0, 
+        rel_link_lengths = np.array([0.6, 0.3, 0.1])
+    )
