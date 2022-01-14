@@ -12,74 +12,245 @@ md"
 
 # Proximodistal Freezing and Freeing Degrees of Freedom (PDFF)
 
-We implement and test PDFF for a N-DOF planar robotic arm.
+We implement and train an $$N$$-DoF planar serial-link robotic arm to reach a specified target based on an infant's self-exploration behaviour (PDFF) detailed in this paper:
 
-Many things to note here. Primarily this paper (cite it) involves the following:
- - PI^BB
- - others...
+> Stulp, Freek, and Pierre Yves Oudeyer. 2018. “Proximodistal Exploration in Motor Learning as an Emergent Property of Optimization.” Developmental Science 21 (4): 1–12. [DOI](https://doi.org/10.1111/desc.12638).
 
-We first define the target, pₜ.
+As the above study shows, this behavior is emergent as a result of the objective costs defined in the $$\text{PI}^\text{BB}$$ black-box stochastic optimization algorithm. The objective costs asses the rollout simulations, which are done kinematically; although the same can be done in a full robot dynamics simulator, that has not been attempted here.
 
-This is a template; can easily generalize to N-DOF and non-planar. Limited by FK function generality, and simulation rollout fidelity (kinematic/dynamic sims...).
+Below, we define the necessary variables for describing the planar robot arm structure, simulation specifics, as well as the reach-task specification: initial joint configuration and target position.
 
 "
 
 # ╔═╡ 77c4b466-f0f4-4f4e-81d8-5597b623b034
-T = 1; N = 2; Δt = 1e-2; # dur of motion, T, num joints, N, and discrete interval, Δt
+T = 1; N = 3; Δt = 1e-2;  # dur of motion, T, num joints, N, discrete interval, Δt
 
 # ╔═╡ 579a522a-ed0b-4d96-96c4-9b4627100b27
-l₁ = 0.8; l₂ = 0.5;      # arm link lengths
+L = [0.6, 0.3, 0.1];      # arm link lengths (starting from the base)
 
 # ╔═╡ 13fa12b5-04fe-4439-b410-64427157be73
 begin
-	qₛ  = [π/8, π/4];    # starting joint configuration
-	ʷpₜ = [0.3, 0.7];    # x, y of target location
+	qₛ  = [π/8, π/4, π/5]; # starting joint configuration
+	ʷpₜ = [-0.3, 0.3];     # x, y of target location (2D plane only) in the world frame
 end;
+
+# ╔═╡ 888b1352-df73-48ed-a564-c93890d581aa
+md"
+
+We now specify the general forward kinematics function for planar serial-link robots to be able to carry out the kinematic simulations.
+
+"
+
+# ╔═╡ d8e89f3d-6358-436f-96d7-e255bde19c60
+md"
+
+## Task Specification and Objectives
+
+The reach task is communicated to the $$\text{PI}^\text{BB}$$ algorithm through objective costs in the rollout evaluation function, $$\tilde{J}\left(\ddot{\mathbf{q}}(\cdot)\right)$$, where $$\mathbf{q}(t)$$ is the robot joint configuration at time $$t$$. This function assess a rollout given the joint accelerations over the duration of reaching motion $$t \in [0, T]$$; the following objective costs, specified in the aforementioned study, result in the emergent PDFF behavior during reach training:
+
+- Reach cost: $$||{^W}\mathbf{p}_{N}(T) - {^W}\mathbf{p}_{\text{target}}||^2$$
+- Comfort cost: $$\max(\mathbf{q}(T))$$
+- Acceleration cost: $$a(t) = \frac{\sum_{n=1}^{N}(N+1-n)\ddot{q}_n(t)}{\sum_{n=1}^{N}(N+1-n)}$$
+
+Thus, we have the following terminal cost of motion:
+
+$$C_T = k_T||{^W}\mathbf{p}_{N}(T) - {^W}\mathbf{p}_{\text{target}}||^2 + \max(\mathbf{q}(T)),$$
+
+and the following instantaneous cost due to acceleration:
+
+$$r_t = k_t a(t).$$
+
+This gives the rollout evaluation function,
+
+$$\tilde{J}(\ddot{\mathbf{q}}) = C_T + \sum_{t=0}^{T}r_t\Delta t.$$
+
+The factors $$k_T$$ and $$k_t$$ act as weights for relative prioritization of objectives and to scale and compensate for different ranges of values for the different cost components. Again, following the same study, we set the order of priorities as reach close to the goal, achieve end-state comfort, and minimize acceleration.
+
+"
+
+# ╔═╡ eb83fcda-95f1-4166-b851-5a3d0f090e4d
+kt = 1e-5/Δt; kT = 1e2;
+
+# ╔═╡ 0e771a6e-3374-43ef-ab3a-735a0f3982d1
+md"
+
+## $$\text{PI}^\text{BB}$$: Blackbox Stochastic Optimization
+
+The control policy for the motion of the robot encodes the reach trajectory in a time-activation representation per arm joint. The policy is completely specified by the parameter vectors per joint, that act as weights for $$B$$ number of time-shifted Gaussian basis functions representing joint acceleration over time. This policy is optimized by the $$\text{PI}^\text{BB}$$ algorithm, which is suggested in the study and is based on the covariance matrix adaptation technique.
+
+We now implement this algorithm, but with minor changes. Specifically, we have bundled the individual parameter vectors (per joint) into one matrix over which all computations take place; the same goes for the covariance matrices. Furthermore, here we have defined the cost convergence check (stopping criterion) to return true when the mean of the last five cost differences is less than the user-specified tolerance. Our version of the $$\text{PI}^\text{BB}$$ algorithm is given below.
+
+> **inputs:**
+> - initial parameter matrix $$\Theta_\text{init}$$ 
+> - cost function $$J: \Theta \mapsto \mathbb{R}$$
+> - exploration levels: $$\lambda_\text{init}$$, $$\lambda_\text{min}$$, $$\lambda_\text{max}$$
+> - rollouts per update: $$K$$
+> - eliteness parameter: $$h$$
+> **procedure:**
+> - let $$\Theta = \Theta_\text{init}$$
+> - let $$\mathbf{\Sigma} = [\lambda_\text{init}\mathbf{I}]_{i=1}^{n}$$ $$\triangleright$$ *3D stacked covariance matrix*
+> - **while** cost not converged **do**
+>   - *Exploration: sample parameters*
+>   - **foreach** $$k$$ in $$K$$ **do**
+>       - let $$\theta^i_k \sim \mathcal{N}(\theta^i, \Sigma^i)$$ for $$i = 1, \ldots N$$ $$\triangleright$$ *note: $$\Theta_k = \left[\theta^1_k | \ldots | \theta^N_k\right]$$*
+>       - let $$J_k = J(\Theta_k)$$ $$\triangleright$$ *cost of iterations*
+>   - **end**
+>   - let $$J_\text{min} = \min{\{J_k\}_{k=1}^K}$$; $$J_\text{max} = \max{\{J_k\}_{k=1}^K}$$
+>   - *Evaluation: compute weight for each sample*
+>   - **foreach** $$k$$ in $$K$$ **do**
+>       - let $$P_k = \frac{\exp\left(-h\frac{J_k - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}{\sum_{l=1}^K\exp\left(-h\frac{J_l - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}$$ $$\triangleright$$ *relative probabilities for iterations*
+>   - **end**
+>   - *Update: weighted averaging over $$K$$ samples*
+>   - **foreach** $$i$$ in $$N$$ **do**
+>     - define $$\Sigma^i \gets \sum_{k=1}^{K}[P_k(\theta_k^i-\theta^i)(\theta_k^i-\theta^i)^\intercal]$$
+>     - set $$\Sigma^i \gets \texttt{boundcovar}(\Sigma^i, \lambda_\text{min}, \lambda_\text{max})$$
+>   - **end**
+>   - set $$\Theta \gets \sum_{k=1}^K [P_k \Theta_k]$$
+> - **end**
+
+"
+
+# ╔═╡ dceb70eb-b564-46cd-8dd0-9e9ef82aae5a
+md"
+
+Given a particular parameter matrix $$\Theta$$ during the iterative search in $$\text{PI}^{\text{BB}}$$, we get the corresponding joint accelerations by the following transformation,
+
+$$\ddot{\mathbf{q}}(t) = \Theta^\intercal \mathbf{g}(t),$$
+
+where $$\mathbf{g}(t) ∈ \mathbb{R}^B$$ is a vector of equally-spaced and normalized Gaussian-basis functions that together describe the joint space trajectory of each joint when scaled by the respective weights. Note that we constrain the number $$B$$ for suitable control over joint acceleration profiles. Larger $$B$$ implies finer control over joint trajectories, but also extra computation. The basis functions with widths $$w$$ and centers $$c_b$$ are given by,
+
+$$g_b(t) = \frac{\psi_b(t)}{\sum_{b=1}^{B}\psi_b(t)}, \text{ where } \psi_b(t) = \exp\left(-\frac{(t-c_b)^2}{w^2}\right).$$
+
+Below, we start with setting these parameters and functions for the algorithm and control policy.
+
+"
+
+# ╔═╡ 3a1df77f-5620-468a-989e-082a34bc10ba
+md"
+
+The equally spaced un-normalized Gaussian functions $$\psi_b(t)$$ are shown below.
+
+"
+
+# ╔═╡ b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
+md"
+
+Note that the un-normalized bases decay beyond $$t \in[0, T]$$ and do not account for the overlapping areas. On the other hand, the normalized bases do account for overlaps and plateau at $$1$$ beyond the duration of reach motion, as shown below.
+
+"
+
+# ╔═╡ 95b4ef3a-f678-40d3-9f69-a25ad9e3de77
+md"
+
+We can now define the rollout evaluation cost function required in $$\text{PI}^{\text{BB}}$$ after which we continue by implementing that algorithm and its components.
+
+"
+
+# ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
+function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
+	eigvals, eigvecs = eigen(Σ);
+	@. eigvals = clamp(abs(eigvals), λₘᵢₙ, λₘₐₓ) * sign(eigvals);
+	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric; # Σ = VΛV⁻¹
+	return Σ + 1e-6I # add ϵ to diag for numerical stability in cholesky factorization
+end
+
+# ╔═╡ 7fa49867-3d71-493e-9fcb-b1d6ffa64a47
+md"
+
+We now run the above optimization algorithm on our reach problem.
+
+"
+
+# ╔═╡ fb680a98-01ec-44ad-945f-2b3a2f7464d0
+md"
+
+The following simulation shows the reach action.
+
+"
+
+# ╔═╡ 3bf7c9bb-89f0-4f19-9ed3-ad42dd34f042
+md"
+
+The optimal joint accelerations arrived at by $$\text{PI}^{\text{BB}}$$ are shown below. We also show the resulting joint angle evolutions.
+
+"
+
+# ╔═╡ c8017f58-8e11-48f6-9f53-d18a985b9c37
+md"
+
+Note that the final joint angles determine the joint configuration needed to reach the target. Hence, in essence, $$\text{PI}^{\text{BB}}$$ has solved the inverse kinematics problem, which we confirm below.
+
+"
+
+# ╔═╡ f077a358-7b84-447e-8740-aae45c399829
+macro multidef(ex)
+    @assert(ex isa Expr)
+    @assert(ex.head == :(=))
+    vars = ex.args[1].args
+    what = ex.args[2]
+    rex = quote end
+    for var in vars
+       push!(rex.args, :( $(esc(var)) = $(esc(what)) ))
+    end
+    rex
+end;
+
+# ╔═╡ cc358c88-32c3-4673-86e1-40b8b7d9e67a
+begin
+	function FK(q, n) # x, y for an intermediate link tip in the world frame
+		@multidef x, y, qsum = 0;
+		for  i ∈ 1:n
+			qsum += q[i];
+			x    += L[i]*cos(qsum);
+			y    += L[i]*sin(qsum);
+		end
+		return [x, y]
+	end
+	function FK(q)    # x, y for all link tips in the world frame (including the base)
+		@multidef xs, ys = zeros(N+1); qsum = 0;
+		for i ∈ 1:N
+			qsum   += q[i];
+			xs[i+1] = xs[i] + L[i]*cos(qsum);
+			ys[i+1] = ys[i] + L[i]*sin(qsum);
+		end
+		return [xs, ys]
+	end
+end
 
 # ╔═╡ 8b62aae3-46f3-47f3-b526-6663eaf19aae
 begin
-	function plot_arm(l₁, l₂, q₁, q₂; alpha=1.0)
-		x = [0, l₁*cos(q₁), l₂*cos(q₁+q₂) + l₁*cos(q₁)]
-		y = [0, l₁*sin(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)]
-		plot(x, y; xlims=(-(l₁+l₂), l₁+l₂), ylims=(-(l₁+l₂), l₁+l₂), linewidth=5, 
+	function plot_arm(L, q; alpha=1.0)
+		x, y = FK(q)
+		lmax = sum(L)
+		plot(x, y; xlims=(-lmax, lmax), ylims=(-lmax, lmax), linewidth=5, 
 			legend=false, aspect_ratio=:equal, alpha=alpha)
+		scatter!(x[1:end-1], y[1:end-1]; markercolor="orange", markersize=3,
+			markershape=:circle)
 	end
-	function plot_target(xₜ, yₜ)
-		scatter!([xₜ], [yₜ]; markercolor="orange", markersize=7, markershape=:star5)
+	function plot_target(pₜ)
+		scatter!(pₜ[1, :], pₜ[2, :]; markercolor="yellow", markersize=7,
+			markershape=:star5)
 	end
 	function plot_base()
 		scatter!([0], [-0.04]; markercolor="grey", markersize=7, 
 			markershape=:utriangle)
 	end
-	function plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ)
-		plot_arm(l₁, l₂, q₁, q₂)
-		xₛ = l₂*cos(q₁+q₂) + l₁*cos(q₁)
-		yₛ = l₂*sin(q₁+q₂) + l₁*sin(q₁)
-		plot_target(xₜ, yₜ)
+	function plot_env(L, q, pₜ)
+		plot_arm(L, q)
+		plot_target(pₜ)
 		plot_base()
 	end
-	plot_env(l₁, l₂, qₛ..., ʷpₜ...)
+	plot_env(L, qₛ, ʷpₜ)
+	plot!(title="Reach-Task Specification")
 end
-
-# ╔═╡ d8e89f3d-6358-436f-96d7-e255bde19c60
-md"
-
-## Task specification
-
-Costs.
-
-"
-
-# ╔═╡ eb83fcda-95f1-4166-b851-5a3d0f090e4d
-kt = 1e-5; kT = 1e2;
 
 # ╔═╡ 6df3c802-ae7c-4532-ab61-15d31257e514
 begin
 	norm2(v::AbstractVector) = v'*v;
 	function double_integrate(ẍ, x₀, ẋ₀) # ∫∫ẍdt where ẍ is a N×T matrix 
 		@assert ndims(ẍ) == 2 && size(ẍ, 2) > 1
-		x = ẋ = zeros(size(ẍ)...);
-		ẋ[:, 1] = ẋ₀; x[:, 1] = x₀; 
+		@multidef x, ẋ = zeros(size(ẍ)...);
+		x[:, 1] = x₀; ẋ[:, 1] = ẋ₀;
 		for i ∈ 2:size(ẍ, 2)
 			ẋ[:, i] = ẋ[:, i-1] + ẍ[:, i]*Δt;
 			x[:, i] = x[:, i-1] + ẋ[:, i]*Δt;
@@ -90,55 +261,17 @@ end;
 
 # ╔═╡ 10a7e2d8-180e-4072-97c9-26d8adb39690
 begin
-	p²ₙ(q₁, q₂) = [l₂*cos(q₁+q₂) + l₁*cos(q₁), l₂*sin(q₁+q₂) + l₁*sin(q₁)];
-	pₙ(q)  = (size(q, 1) == 2) ? p²ₙ(q...) : # fwd kinematics func for 2-DoF only
-		throw(AssertionError("dim(q) ≠ 2"));
+	pₙ(q)  = FK(q, N);
 	q(q̈)   = double_integrate(q̈, qₛ, zeros(N));
-	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N])/sum([(N+1-n) for n ∈ 1:N]);
+	rₜ(q̈ₜ) = sum([(N+1-n) * (q̈ₜ[n]^2) for n ∈ 1:N]);
 	Cₜ(q)  = kT*norm2(pₙ(q[:, end]) - ʷpₜ) + maximum(q);
-	J̃(q̈)   = Cₜ(q(q̈)) + kt*sum(rₜ.(q̈ |> eachcol));
+	J̃(q̈)   = Cₜ(q(q̈)) + kt*Δt*sum(rₜ.(q̈ |> eachcol))/sum([(N+1-n) for n ∈ 1:N]);
 end
-
-# ╔═╡ 0e771a6e-3374-43ef-ab3a-735a0f3982d1
-md"
-
-## $$\text{PI}^\text{BB}$$: Black-box Stochastic optim
-
-The algorithm is as follows:
-> **inputs:**
-> - initial parameter vector $$\theta_\text{init}$$ 
-> - cost function $$J: \theta \mapsto \mathbb{R}$$
-> - exploration levels: $$\lambda_\text{init}$$, $$\lambda_\text{min}$$, $$\lambda_\text{max}$$
-> - roll-outs per update: $$K$$
-> - eliteness parameter: $$h$$
-> **procedure:**
-> - let $$\theta = \theta_\text{init}$$; $$\Sigma = \lambda_\text{init}\mathbf{I}$$
-> - **while** cost not converged **do**
->   - *Exploration: sample parameters*
->   - **foreach** $$k$$ in $$K$$ **do**
->       - let $$\theta_k \sim \mathcal{N}(\theta, \Sigma)$$; $$J_k = J(\theta_k)$$ $$\triangleright$$ *cost of iterations*
->   - **end**
->   - let $$J_\text{min} = \min{\{J_k\}_{k=1}^K}$$; $$J_\text{max} = \max{\{J_k\}_{k=1}^K}$$
->   - *Evaluation: compute weight for each sample*
->   - **foreach** $$k$$ in $$K$$ **do**
->       - let $$P_k = \frac{\exp\left(-h\frac{J_k - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}{\sum_{l=1}^K\exp\left(-h\frac{J_l - J_\text{min}}{J_\text{max} - J_\text{min}}\right)}$$ $$\triangleright$$ *relative probabilities for iterations*
->   - **end**
->   - *Update: weighted averaging over $$K$$ samples*
->   - define $$\mathbf{\Sigma} \gets \sum_{k=1}^{K}[P_k(\theta_k-\theta)(\theta_k-\theta)^\intercal]$$
->   - set $$\mathbf{\Sigma} \gets \texttt{boundcovar}(\mathbf{\Sigma}, \lambda_\text{min}, \lambda_\text{max})$$
->   - define $$\theta_\text{new} \gets \sum_{k=1}^K [P_k \theta_k]$$
-> - **end**
-
-"
-
-# ╔═╡ 7dec2c21-317d-4514-bd14-37ea606b2720
-# TODO: remove bold from Σ; add bold for input which is array of Σ's + indexing for θ
-# TODO: define from matrix theta and change pseudocode above to now include mat Θ
-# TODO: for training data, we can use nearby points as warm starts and explore outwords like that; many starts to one goal, then many goals from one start (both paradigms to use the same methodology)
 
 # ╔═╡ 200f38e6-971a-4212-ae05-a68356db3d17
 begin
-	λᵢₙᵢₜ = λₘᵢₙ = 0.05; λₘₐₓ = 5; # exploration levels; TODO: set λₘₐₓ acc. to need
+	@multidef λᵢₙᵢₜ, λₘᵢₙ = 0.05;  # exploration levels
+	λₘₐₓ = 5;                      # set according to need (usual max range)
 	B = 10; w = T/2B;              # num basis funcs, B, and width of basis funcs, w
 	Σ = cat([Diagonal(λᵢₙᵢₜ*I, B) for i ∈ 1:N]...; dims=3); # covar matrix
 	Θ = zeros(B, N);               # no default action to start with
@@ -149,46 +282,24 @@ end;
 begin
 	ψ(c, t) = exp(-((t-c)/w)^2);
 	cs      = w + 0:2w:T;
-	Ψ(t)    = [ψ(cs[b], t) for b ∈ 1:B]
+	Ψ(t)    = [ψ(cs[b], t) for b ∈ 1:B];
 	g(b, t) = ψ(cs[b], t)/sum(Ψ(t));
 	g(t)    = [g(b, t) for b ∈ 1:B];
-	q̈(Θ, t) = Θ' * g(t);
+	q̈(Θ, t) = Θ' * g(t); # parameter matrix to joint accelerations
 end
 
-# ╔═╡ 877321e9-2e56-482c-956c-df442cc2ff9e
-gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], 
-	label=latexstring("\$g_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
-
-# ╔═╡ b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
-md"
-
-A side note here: unnormalized bases decay out beyond [0, T] and don't include overlapping areas. So depending on the use case (continued motion) and proper adjustment to overlap, we may or may not keep this.
-
-"
+# ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
+J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃ # J = J̃(q̈(Θ, t)) over t ∈ 0:Δt:T
 
 # ╔═╡ e9186b1d-75ca-47ce-8fdf-f617b63ab171
 let
 	Ψs = hcat(Ψ.(0:0.001:T)...); plot(); [plot!(0:0.001:T, Ψs[b, :], 
-		label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!() |> as_svg
+		label=latexstring("\$\\psi_{$(b)}\$")) for b ∈ 1:B]; plot!(; title=L"\mathbf{\Psi}(t)", xlabel=L"t") |> as_svg
 end
 
-# ╔═╡ 95b4ef3a-f678-40d3-9f69-a25ad9e3de77
-md"
-
-Continue with defining the cost function taking Theta.
-
-"
-
-# ╔═╡ cac539cc-5acd-4385-8841-74533c914e28
-J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
-
-# ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
-function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
-	eigvals, eigvecs = eigen(Σ);
-	@. eigvals = clamp(abs(eigvals), λₘᵢₙ, λₘₐₓ) * sign(eigvals);
-	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric; # Σ = VΛV⁻¹
-	return Σ + 1e-6I # add ϵ to diag for numerical stability of cholesky factorization
-end
+# ╔═╡ 877321e9-2e56-482c-956c-df442cc2ff9e
+gs = hcat(g.(0:0.001:T)...); plot(); [plot!(0:0.001:T, gs[b, :], 
+	label=latexstring("\$g_{$(b)}\$")) for b ∈ 1:B]; plot!(; title=L"\mathbf{g}(t)", xlabel=L"t") |> as_svg
 
 # ╔═╡ f1a1b8ba-9ff6-482b-93ff-240694c4206d
 function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
@@ -208,7 +319,7 @@ function PIᴮᴮ(Θ, Σ; tol=1e-3, maxiter = 1000)
 		end
 		Σ = zeros(B, B, N);
 		for n ∈ 1:N
-			for k ∈ 1:K 
+			for k ∈ 1:K
 				Σ[:, :, n] += Ps[k]*(Θs[:, k, n]-Θ[:, n])*(Θs[:, k, n]-Θ[:, n])';
 			end
 			Σ[:, :, n] = boundcovar(Σ[:, :, n], λₘᵢₙ, λₘₐₓ);
@@ -228,15 +339,30 @@ end
 Θₒₚₜ, _, cost_hist = PIᴮᴮ(Θ, Σ)
 
 # ╔═╡ bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
-plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History")
+plot(0:length(cost_hist)-1, cost_hist; legend=false, title="Cost History", ylabel=L"J(\Theta)", xlabel="Iterations")
 
 # ╔═╡ 8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
 begin
 	qs = q(hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...))
 	@gif for i = 1:size(qs, 2)
-		plot_env(l₁, l₂, qs[:, i]..., ʷpₜ...)
+		plot_env(L, qs[:, i], ʷpₜ)
+		plot!(; title="Optimal Reach Action")
 	end
 end
+
+# ╔═╡ 7169d4da-1141-42a9-891f-9b1ec09f08d9
+qddₒₚₜ = hcat([q̈(Θₒₚₜ, t) for t ∈ 0:Δt:T]...); plot(); [plot!(0:Δt:T, qddₒₚₜ[n, :], 
+	label=latexstring("\$\\ddot{q}_{$(n)}(t)\$")) for n ∈ 1:N]; plot!(; title=L"\ddot{\mathbf{q}}_{opt}(t)", xlabel=L"t", ylabel="Joint Acceleration [rad/s²]", legend=:bottomleft) |> as_svg
+
+# ╔═╡ 1b57bb30-461d-437e-9e25-4d16e4f0ff7c
+qₒₚₜ = qddₒₚₜ |> q; plot(); [plot!(0:Δt:T, qₒₚₜ[n, :], 
+	label=latexstring("\$q_{$(n)}(t)\$")) for n ∈ 1:N]; plot!(; title=L"\mathbf{q}_{opt}(t)", xlabel=L"t", ylabel="Joint Angle [rad]", legend=:topleft) |> as_svg
+
+# ╔═╡ 5e1c82a6-748c-49f0-8bca-17c3c187d2f7
+FK(qₒₚₜ[:, end]) # [xs, ys]; note the last entries match the target location (approx.)
+
+# ╔═╡ 844a2f76-a98c-4859-b8e3-c2ccfdccac82
+plot_env(L, qₒₚₜ[:, end], ʷpₜ); plot!(title="Reach-Task Completion")
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -722,9 +848,9 @@ uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 
 [[Ogg_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "7937eda4681660b4d6aeeecc2f7e1c81c8ee4e2f"
+git-tree-sha1 = "887579a3eb005446d514ab7aeac5d1d027658b8f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
-version = "1.3.5+0"
+version = "1.3.5+1"
 
 [[OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1211,24 +1337,36 @@ version = "0.9.1+5"
 # ╠═77c4b466-f0f4-4f4e-81d8-5597b623b034
 # ╠═579a522a-ed0b-4d96-96c4-9b4627100b27
 # ╠═13fa12b5-04fe-4439-b410-64427157be73
+# ╟─888b1352-df73-48ed-a564-c93890d581aa
+# ╠═cc358c88-32c3-4673-86e1-40b8b7d9e67a
 # ╟─8b62aae3-46f3-47f3-b526-6663eaf19aae
 # ╟─d8e89f3d-6358-436f-96d7-e255bde19c60
 # ╠═eb83fcda-95f1-4166-b851-5a3d0f090e4d
 # ╠═6df3c802-ae7c-4532-ab61-15d31257e514
 # ╠═10a7e2d8-180e-4072-97c9-26d8adb39690
 # ╟─0e771a6e-3374-43ef-ab3a-735a0f3982d1
-# ╠═7dec2c21-317d-4514-bd14-37ea606b2720
+# ╟─dceb70eb-b564-46cd-8dd0-9e9ef82aae5a
 # ╠═200f38e6-971a-4212-ae05-a68356db3d17
 # ╠═943f5d35-dcc1-457c-a921-6d019e8203f1
-# ╟─877321e9-2e56-482c-956c-df442cc2ff9e
-# ╟─b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
+# ╟─3a1df77f-5620-468a-989e-082a34bc10ba
 # ╟─e9186b1d-75ca-47ce-8fdf-f617b63ab171
+# ╟─b924f77d-58fc-4dd1-8417-6eab6d9b7ec4
+# ╟─877321e9-2e56-482c-956c-df442cc2ff9e
 # ╟─95b4ef3a-f678-40d3-9f69-a25ad9e3de77
 # ╠═cac539cc-5acd-4385-8841-74533c914e28
 # ╠═9291d021-7f99-450a-845d-898ffbe5e0d1
 # ╠═f1a1b8ba-9ff6-482b-93ff-240694c4206d
-# ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
+# ╟─7fa49867-3d71-493e-9fcb-b1d6ffa64a47
 # ╟─bbbbb0de-fe8e-42ec-b3f4-0dfac2cc8618
+# ╠═2dac5e67-a0e1-4633-abdc-996a625c5a23
+# ╟─fb680a98-01ec-44ad-945f-2b3a2f7464d0
 # ╟─8c9e2cf5-d3f0-4d0d-9830-29a5c4b86ea9
+# ╟─3bf7c9bb-89f0-4f19-9ed3-ad42dd34f042
+# ╟─7169d4da-1141-42a9-891f-9b1ec09f08d9
+# ╟─1b57bb30-461d-437e-9e25-4d16e4f0ff7c
+# ╟─c8017f58-8e11-48f6-9f53-d18a985b9c37
+# ╠═5e1c82a6-748c-49f0-8bca-17c3c187d2f7
+# ╟─844a2f76-a98c-4859-b8e3-c2ccfdccac82
+# ╟─f077a358-7b84-447e-8740-aae45c399829
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
