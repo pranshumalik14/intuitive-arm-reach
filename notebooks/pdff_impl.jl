@@ -148,10 +148,10 @@ We can now define the rollout evaluation cost function required in $$\text{PI}^{
 
 # ╔═╡ 9291d021-7f99-450a-845d-898ffbe5e0d1
 function boundcovar(Σ, λₘᵢₙ, λₘₐₓ)
-	eigvals, eigvecs = eigen(Σ);
-	@. eigvals = clamp(abs(eigvals), λₘᵢₙ, λₘₐₓ) * sign(eigvals);
-	Σ = eigvecs*Diagonal(eigvals)*inv(eigvecs) |> real |> Symmetric; # Σ = VΛV⁻¹
-	return Σ + 1e-6I # add ϵ to diag for numerical stability in cholesky factorization
+	Q, _ = qr(Σ);  # QR decomposition
+	σ    = clamp.(eigvals(Σ) |> real, λₘᵢₙ, λₘₐₓ); # pd symmetric matrix ⟹ λᵢ > 0
+	Σ    = Q*Diagonal(σ)*Q'  |> Symmetric;         # Σ = QΛQᵀ
+	return Σ + 1e-12I # add ϵ to diag for numerical stability in cholesky factorization
 end
 
 # ╔═╡ 7fa49867-3d71-493e-9fcb-b1d6ffa64a47
@@ -171,7 +171,7 @@ The following simulation shows the reach action.
 # ╔═╡ 3bf7c9bb-89f0-4f19-9ed3-ad42dd34f042
 md"
 
-The optimal joint accelerations arrived at by $$\text{PI}^{\text{BB}}$$ are shown below. We also show the resulting joint angle evolutions.
+The optimal joint accelerations arrived at by $$\text{PI}^{\text{BB}}$$ are shown below. We also show the resulting joint angle evolutions from which it is easy to observe that a naturalistic movement has been generated, first involving rotation of the proximal joints followed by the distal joints.
 
 "
 
