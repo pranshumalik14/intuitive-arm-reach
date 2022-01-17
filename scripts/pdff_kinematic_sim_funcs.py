@@ -169,30 +169,43 @@ def eval_rollout(task_info, Theta_matrix, init_condit):
     _, gen_q, _, _ = get_traj(gen_qdotdot, robot_arm, dt, init_condit)
     return cost_function(target_xy, gen_q, gen_qdotdot, robot_arm)
 
-def boundcovar(Sigma, lambda_min, lambda_max):
+def boundcovar(Sigma, lambda_min, lambda_max, qr_factorization = True):
+    factorization = None
+    factorization_inv = None
     eigvals, eigvecs = LA.eig(Sigma)   
-    eigvals = np.clip(np.abs(eigvals), lambda_min, lambda_max) * np.sign(eigvals)
-    Sigma = eigvecs * eigvals*np.eye(len(eigvals)) * LA.inv(eigvecs)
+
+    if qr_factorization:
+        Q, _ = LA.qr(Sigma)
+        factorization = Q
+        factorization_inv = Q.transpose()
+    else:
+        factorization = eigvecs
+        factorization_inv = LA.inv(eigvecs)
     
-    return Sigma + 1e-6*np.eye(len(eigvals))
-    # https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
+    eigvals = np.clip(np.abs(eigvals), lambda_min, lambda_max) * np.sign(eigvals)
+    Sigma = np.matmul(
+        factorization, 
+        np.matmul(
+            eigvals*np.eye(len(eigvals)), 
+            factorization_inv
+        )
+    )
+    
+    return Sigma + 1e-12*np.eye(len(eigvals))
+# https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
+
 
 def PIBB(task_info, Theta, Sigma, init_condit, tol = 1e-3, max_iter = 1000):
     print("######################### PIBB Algorithm Started #########################")
     start_time = time.time()
     
-    robot_arm_2D = task_info.get_robot_arm_2D() 
     lambda_min = task_info.get_lambda_min()
     lambda_max = task_info.get_lambda_max()
     
     B = task_info.get_B()
     K = task_info.get_K()    
-    N = task_info.get_N()    
-    T = task_info.get_T()    
+    N = task_info.get_N()     
     h = task_info.get_h()    
-    dt = task_info.get_dt()    
-    w = task_info.get_w()    
-    cs = task_info.get_cs()
     
     iter_count = 0
     delta_J = eval_rollout(task_info, Theta, init_condit)
@@ -261,7 +274,7 @@ def gen_theta(x_target, init_condit, robot_arm):
     # Sample data
     B = 10
     K = 20
-    N, _, _ = robot_arm.get_params() 
+    N, _, _ = robot_arm.get_arm_params() 
 
 
     Sigma_matrix = np.array( [lambda_init*np.eye(B) for i in range(N)] )
@@ -293,10 +306,12 @@ def gen_theta(x_target, init_condit, robot_arm):
     """
     
 def training_data_gen(robot_arm):
-    N, robot_arm_length, link_lengths = robot_arm.get_arm_params()
+    # N, robot_arm_length, link_lengths = robot_arm.get_arm_params()
 
     x_target = np.array([-0.3, 0.3]) # a function that generates a point within the robot_arm_length circle radius
     init_condit = [np.array([np.pi/8, np.pi/4, np.pi/5]), np.array([0, 0, 0])]
+
+    Theta, _ = gen_theta(x_target, init_condit, robot_arm)
 
 if __name__ == '__main__':
     robot_arm = RobotArm2D(
@@ -304,3 +319,5 @@ if __name__ == '__main__':
         arm_length = 1.0, 
         rel_link_lengths = np.array([0.6, 0.3, 0.1])
     )
+
+    training_data_gen(robot_arm)
