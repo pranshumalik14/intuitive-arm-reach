@@ -333,6 +333,7 @@ def training_data_gen(robot_arm):
 
     Theta, _ = gen_theta(x_target, init_condit, robot_arm)
 
+    return Theta
 
 if __name__ == '__main__':
     robot_arm = RobotArm2D(
