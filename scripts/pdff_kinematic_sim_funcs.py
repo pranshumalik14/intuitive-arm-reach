@@ -182,7 +182,8 @@ def boundcovar(Sigma, lambda_min, lambda_max, qr_factorization = True):
         factorization = eigvecs
         factorization_inv = LA.inv(eigvecs)
     
-    eigvals = np.clip(np.abs(eigvals), lambda_min, lambda_max) * np.sign(eigvals)
+    eigvals = np.clip(eigvals, lambda_min, lambda_max)
+
     Sigma = np.matmul(
         factorization, 
         np.matmul(
