@@ -1,0 +1,5 @@
+ipykernel
+sympy
+numpy
+roboticstoolbox-python
+matplotlib

@@ -13,12 +13,12 @@ class RobotArm2D:
     def get_arm_params(self):
         return self.n_dims, self.arm_length, self.link_lengths
 
-    def angles_to_link_positions(q, robot_arm):
+    def angles_to_link_positions(self, q):
         # Forward kinematics
         n_time_steps = q.shape[0]
         n_dims = q.shape[1]
 
-        n_dims_robot, arm_length, link_lengths = robot_arm.get_arm_params()
+        n_dims_robot, arm_length, link_lengths = self.get_arm_params()
         assert(n_dims == n_dims_robot)
 
         links_x = np.zeros((n_time_steps, n_dims+1))
@@ -42,8 +42,6 @@ class RobotArm2D:
             link_positions[:, 2*n+1] = links_y[:, n]
 
         return link_positions
-
-
 class RobotArm3D(rtb.DHRobot):
     def __init__(self, name, DHDescription, qz, qr, meshdir):
         super().__init__(DHDescription, name=name, meshdir=meshdir)
