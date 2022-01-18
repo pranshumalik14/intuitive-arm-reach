@@ -5,8 +5,8 @@ def numpy_linspace(start, stop, step):
     return np.linspace(start, stop, int((stop-start)/step) + 1)
 
 
-class TaskInfo2D:
-    def __init__(self, robotarm, lambda_min, lambda_max, B, K, N, T, h, target_xy, dt):
+class TaskInfo:
+    def __init__(self, robotarm, lambda_min, lambda_max, B, K, N, T, h, target_pos, dt):
         self.robotarm = robotarm
         self.lambda_min = lambda_min
         self.lambda_max = lambda_max
@@ -16,7 +16,7 @@ class TaskInfo2D:
         self.T = T
         self.h = h  # eliteness param
         self.dt = dt
-        self.target_xy = target_xy
+        self.target_pos = target_pos
 
         self.w = T / (2 * B)
 
@@ -24,7 +24,7 @@ class TaskInfo2D:
             return w + numpy_linspace(0, T, 2*w)  # step is 2*w
         self.cs = gen_cs(self.w, T)
 
-    def get_robot_arm_2D(self):
+    def get_robot_arm(self):
         return self.robotarm
 
     def get_lambda_min(self):
@@ -33,8 +33,8 @@ class TaskInfo2D:
     def get_lambda_max(self):
         return self.lambda_max
 
-    def get_target_xy(self):
-        return self.target_xy
+    def get_target_pos(self):
+        return self.target_pos
 
     def get_B(self):
         return self.B

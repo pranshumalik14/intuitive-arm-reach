@@ -5,8 +5,8 @@ import matplotlib.animation as animation
 from collections import deque
 import time
 
-from robot_arm_2D import RobotArm2D, angles_to_link_positions_2D
-from task_info_2D import numpy_linspace, TaskInfo2D
+from robot_arm import RobotArm2D, RobotArm3D
+from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
 
@@ -57,12 +57,12 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     return time_steps, q, qdot, qdotdot
 
 
-def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit, dt):
+def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     """
 
     """
     # initial checks
-    assert(len(x_goal) == 2)
+    assert(len(x_goal) == 2 and robot_arm is RobotArm2D)
 
     # Get q and qdot
     time_steps, q, qdot, qdotdot = get_traj(
@@ -70,7 +70,7 @@ def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit, dt):
     n_time_steps = len(time_steps)
 
     # Forward kinematics
-    link_positions = angles_to_link_positions_2D(q, robot_arm)
+    link_positions = robot_arm.angles_to_link_positions(q)
 
     # Robot params
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
@@ -167,8 +167,8 @@ def get_traj_and_simulate(qdotdot, robot_arm, x_goal, init_condit, dt):
 def eval_rollout(task_info, Theta_matrix, init_condit):
     T = task_info.get_T()
     dt = task_info.get_dt()
-    robot_arm = task_info.get_robot_arm_2D()
-    target_xy = task_info.get_target_xy()
+    robot_arm = task_info.get_robot_arm()
+    target_pos = task_info.get_target_pos()
 
     # J(Θ) = hcat([q̈(Θ, t) for t ∈ 0:Δt:T]...) |> J̃; # J = J(q̈(Θ), 0:Δt:T)
     gen_qdotdot = np.array(
@@ -177,7 +177,7 @@ def eval_rollout(task_info, Theta_matrix, init_condit):
     )
 
     _, gen_q, _, _ = get_traj(gen_qdotdot, robot_arm, dt, init_condit)
-    return cost_function(target_xy, gen_q, gen_qdotdot, robot_arm)
+    return cost_function(target_pos, gen_q, gen_qdotdot, robot_arm)
 
 
 def boundcovar(Sigma, lambda_min, lambda_max, qr_factorization=True):
@@ -299,7 +299,7 @@ def gen_theta(x_target, init_condit, robot_arm):
     # no default action to start with
     Theta_matrix = np.zeros(B*N).reshape((B, N))
 
-    task_info = TaskInfo2D(
+    task_info = TaskInfo(
         robotarm=robot_arm,
         lambda_min=lambda_min,
         lambda_max=lambda_max,
@@ -308,7 +308,7 @@ def gen_theta(x_target, init_condit, robot_arm):
         N=N,
         T=1,
         h=10,
-        target_xy=x_target,
+        target_pos=x_target,
         dt=1e-2
     )
 
@@ -319,7 +319,7 @@ def gen_theta(x_target, init_condit, robot_arm):
 
     """
     gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t) for t in numpy_linspace(0, 1, 1e-2)]  )
-    time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate(gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
+    time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate2d(gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
     plt.show()
     """
 
@@ -334,6 +334,7 @@ def training_data_gen(robot_arm):
     Theta, _ = gen_theta(x_target, init_condit, robot_arm)
 
     return Theta
+
 
 if __name__ == '__main__':
     robot_arm = RobotArm2D(
