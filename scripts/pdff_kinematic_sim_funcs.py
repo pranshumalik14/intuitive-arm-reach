@@ -13,7 +13,7 @@ from PIBB_helper import qdotdot_gen
 
 def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     """
-    Takes in a joint accelerations qdotdot, and return 
+    Takes in a joint accelerations qdotdot, and return
 
     Keyword arguments:
     argument -- qdotdot: an t x n_dim matrix (t timesteps, n_dim dimensions) (numpy array)
@@ -62,7 +62,7 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
 
     """
     # initial checks
-    assert(len(x_goal) == 2 and robot_arm is RobotArm2D)
+    assert(len(x_goal) == 2 and isinstance(robot_arm, RobotArm2D))
 
     # Get q and qdot
     time_steps, q, qdot, qdotdot = get_traj(
@@ -315,11 +315,13 @@ def gen_theta(x_target, init_condit, robot_arm):
     Theta, iter_count, J_hist = PIBB(
         task_info, Theta_matrix, Sigma_matrix, init_condit)
 
-    return Theta, J_hist[-1]
+    return Theta, iter_count, J_hist  # Theta, J_hist[-1]
 
     """
-    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t) for t in numpy_linspace(0, 1, 1e-2)]  )
-    time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate2d(gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
+    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
+                           for t in numpy_linspace(0, 1, 1e-2)]  )
+    time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate2d(
+        gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
     plt.show()
     """
 

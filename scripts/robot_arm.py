@@ -13,31 +13,30 @@ class RobotArm2D:
     def get_arm_params(self):
         return self.n_dims, self.arm_length, self.link_lengths
 
-    def angles_to_link_positions(q, robot_arm):
+    def angles_to_link_positions(self, q):
         # Forward kinematics
         n_time_steps = q.shape[0]
-        n_dims = q.shape[1]
+        q_dims = q.shape[1]
 
-        n_dims_robot, arm_length, link_lengths = robot_arm.get_arm_params()
-        assert(n_dims == n_dims_robot)
+        assert(self.n_dims == q_dims)
 
-        links_x = np.zeros((n_time_steps, n_dims+1))
-        links_y = np.zeros((n_time_steps, n_dims+1))
+        links_x = np.zeros((n_time_steps, self.n_dims+1))
+        links_y = np.zeros((n_time_steps, self.n_dims+1))
 
         for t in range(n_time_steps):
             sum_angles = 0
 
-            for i_dim in range(n_dims):
+            for i_dim in range(self.n_dims):
                 sum_angles += q[t, i_dim]
                 links_x[t, i_dim + 1] = links_x[t, i_dim] + \
-                    np.cos(sum_angles) * link_lengths[i_dim]
+                    np.cos(sum_angles) * self.link_lengths[i_dim]
                 links_y[t, i_dim + 1] = links_y[t, i_dim] + \
-                    np.sin(sum_angles) * link_lengths[i_dim]
+                    np.sin(sum_angles) * self.link_lengths[i_dim]
 
-        link_positions = np.zeros((n_time_steps, 2*(n_dims+1)))
+        link_positions = np.zeros((n_time_steps, 2*(self.n_dims+1)))
         # desired structure of link positions is x y x y x y
         # (first x y are for the base joint)
-        for n in range(n_dims + 1):
+        for n in range(self.n_dims + 1):
             link_positions[:, 2*n] = links_x[:, n]
             link_positions[:, 2*n+1] = links_y[:, n]
 
@@ -62,3 +61,6 @@ class RobotArm3D(rtb.DHRobot):
         #     urdf_string=urdf_string,
         #     urdf_filepath=urdf_filepath,
         # )
+
+    def get_arm_params(self):
+        return 5, 5, np.ones(5)  # TODO: latter 2 returns are meaningless

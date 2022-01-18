@@ -15,7 +15,7 @@ def acceleration_cost(qdotdot, t):
 
 def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e2):
     # TODO: fix with inheritance
-    if robot_arm is robot_arm.RobotArm2D:
+    if isinstance(robot_arm, RobotArm2D):
         fk = robot_arm.angles_to_link_positions(q)
         fk_dim = fk.shape[1]  # pos for each dof
         # take the last row and last column/second last column
