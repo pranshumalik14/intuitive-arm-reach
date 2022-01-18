@@ -10,7 +10,7 @@ class RobotArm2D:
             sum(rel_link_lengths) * rel_link_lengths[0:n_dims+1]
         # np.array([1.5, 1.25, 0.4, 0.15, 0.15, 0.1])
 
-    def get_arm_params(self):
+    def get_arm_params(self):  # TODO: remove relative link lengths
         return self.n_dims, self.arm_length, self.link_lengths
 
     def angles_to_link_positions(self, q):
