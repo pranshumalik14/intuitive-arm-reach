@@ -14,13 +14,6 @@ def acceleration_cost(qdotdot, t):
 
 
 def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e2):
-    # if isinstance(robot_arm, RobotArm2D):
-    #     fk = robot_arm.angles_to_link_positions(q)
-    #     fk_dim = fk.shape[1]  # pos for each dof
-    #     # take the last row and last column/second last column
-    #     x_TN = np.array([fk[-1, fk_dim-2], fk[-1, fk_dim-1]])
-    # elif isinstance(robot_arm, RobotArm3D):
-    #     x_TN = robot_arm.fkine(q[-1, :]).t  # TODO: wrap abvove in one func
     x_TN = robot_arm.forward_kinematics(q)
 
     # reach cost

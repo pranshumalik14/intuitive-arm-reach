@@ -5,7 +5,7 @@ import matplotlib.animation as animation
 from collections import deque
 import time
 
-from robot_arm import RobotArm2D, RobotArm3D
+from robot_arm import RobotArm2D, RobotArm3D, RobotArm
 from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
@@ -330,6 +330,7 @@ def training_data_gen(robot_arm):
     # N, robot_arm_length, link_lengths = robot_arm.get_arm_params()
 
     # a function that generates a point within the robot_arm_length circle radius
+    assert(isinstance(robot_arm, RobotArm))
     x_target = np.array([-0.3, 0.3])
     init_condit = [np.array([np.pi/8, np.pi/4, np.pi/5]), np.array([0, 0, 0])]
 

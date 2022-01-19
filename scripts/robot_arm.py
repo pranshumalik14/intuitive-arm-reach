@@ -44,6 +44,8 @@ class RobotArm2D(RobotArm):
         return np.array(links_x[-1], links_y[-1])
 
     def angles_to_link_positions(self, q):
+        # TODO: have to test this, or remove if it wont be used
+        # Could rename it to forward_kinematics_all
         # Forward kinematics
         n_time_steps = q.shape[0]
         q_dims = q.shape[1]
