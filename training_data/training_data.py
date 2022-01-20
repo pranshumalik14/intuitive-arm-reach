@@ -78,6 +78,7 @@ def gen_training_data(robot_arm, N = 10):
     final_training_data = np.zeros(N * N2_rename * 6, dtype = object).reshape((N * N2_rename, 6))
 
     for i in range(N):
+        # TODO: add multiprocessing or using numpy efficient iterators
         init_joint_angles = generate_random_init_joint_angle(robot_arm)
         # init_joint_angles_str = np.array2string(init_joint_angles[0], separator="|") # want only joint angles, not velocity since it is 0
 
