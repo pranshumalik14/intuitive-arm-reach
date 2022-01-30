@@ -26,7 +26,7 @@ We develop intuition for various tasks through experience. Particularly, we lear
 Our project aims to utilize and extend the algorithmic models of aforementioned processes to enable a robotic arm to \emph{intuitively} reach points in its reachable space without the need for explicitly calculating inverse kinematics or dynamics. We heavily rely on the work done in \cite{pdff} which describes how such patterns of exploration can emerge spontaneously as the result of stochastic optimization processes, without explicitly encoding a maturational schedule, and how they can eventually lead to learnt reach actions for a robot. Elements of stochastic optimization also mimic motor babbling and, as a part of the project, we will introduce goal babbling to generate training data to sample and extend this learning process to the robot's reachable space. To conveniently learn and encode goal-directed movements of the robot, we use a simplified form of dynamical movement primitives (DMPs) \cite{dmps}, which is detailed in appendix \ref{subsec:appendix_terms_def}. Here we formulate the requirements, objectives, and components of the Reach Task Learning Algorithm (RTLA) which will be a result of this project.
 
 \section{Assumptions, Knowns, and Constraints}
-The underlying assumption is that the robot, much like an infant, has not yet learned inverse kinematics yet, but the forward kinematics and dynamics models are known for the purpose of simulation and error feedback during learning. Specifically, given a joint configuration $\mathbf{q} \in \mathbb{R}^N$, we are able to calculate the corresponding end-effector position in the world frame, ${^W}\mathbf{p}_{N} = \mathcal{K}(\mathbf{q}) \in \mathbb{R}^p$, through the forward kinematic function for an $N$-DOF robot operating in $p$-dimensional space. There is also no initial reach trajectory involved in the learning process, and thus the algorithm starts from scratch rather than from a demonstration. Since the aim of the algorithm is to learn \emph{how} to reach to a certain position, similar to \cite{pdff}, we disregard the goal-attractor dynamics portion of DMPs, because then there is nothing to learn anymore, i.e., the system will implicitly converge to the goal without the algorithm learning to do that part. Therefore, our control policy is not the full dynamical system with an attractor, but only a radial basis function network (\ref{eqn:dmp_radial_basis}) that generates accelerations in joint space (\ref{eqn:dmp_theta_to_qdd}). Essentially, many assumptions that are standard in conventional robotics, such as goal being the attractor state and warm starts in optimization, are dropped in this developmental science approach to reduce the number of required \emph{auxiliary hypotheses} for understanding and emulating the characteristics of human learning in robots. Initially during the development phase, we will exclusively consider planar robots, i.e., $p=2$, and limit ourselves to robot with spherical wrists, i.e., arm structures for which the end-effector orientation can be decoupled from its position. During simulation run-time or deployment on a physical robot, we will only measure the end-effector and goal positions in the world frame to evaluate the task completion condition, $||{^W\mathbf{p}_{N}} - {^W}\mathbf{p}_{g}|| < R_c$ where $R_c$ is the convergence radius.
+The underlying assumption is that the robot, much like an infant, has not yet learned inverse kinematics yet, but the forward kinematics and dynamics models are known for the purpose of simulation and error feedback during learning. Specifically, given a joint configuration $\mathbf{q} \in \mathbb{R}^N$, we are able to calculate the corresponding end-effector position in the world frame, ${^W}\mathbf{p}_N = \mathcal{K}(\mathbf{q}) \in \mathbb{R}^p$, through the forward kinematic function for an $N$-DOF robot operating in $p$-dimensional space. There is also no initial reach trajectory involved in the learning process, and thus the algorithm starts from scratch rather than from a demonstration. Since the aim of the algorithm is to learn \emph{how} to reach to a certain position, similar to \cite{pdff}, we disregard the goal-attractor dynamics portion of DMPs, because then there is nothing to learn anymore, i.e., the system will implicitly converge to the goal without the algorithm learning to do that part. Therefore, our control policy is not the full dynamical system with an attractor, but only a set of radial basis functions (\ref{eqn:dmp_radial_basis}) that generate accelerations in joint space (\ref{eqn:dmp_theta_to_qdd}). Essentially, many assumptions that are standard in conventional robotics, such as goal being the attractor state and warm starts in optimization, are dropped in this developmental science approach to reduce the number of required \emph{auxiliary hypotheses} for understanding and emulating the characteristics of human learning in robots. Initially during the development phase, we will exclusively consider planar robots, i.e., $p=2$, without joint constraints, and limit ourselves to robot with spherical wrists, i.e., arm structures for which the end-effector orientation can be decoupled from its position. During simulation or deployment, we will only measure the end-effector and goal positions in the world frame to evaluate the task completion condition, $||{^W\mathbf{p}_N} - {^W}\mathbf{p}_{\text{goal}}|| < R_c$ where $R_c$ is the convergence radius.
 
 \begin{figure}[ht]
 \centering
@@ -39,8 +39,8 @@ The underlying assumption is that the robot, much like an infant, has not yet le
 We slightly modify the robot arm reach task described above by adding a time-limit $T$ for the reach action, the rationale for which is explained in section \ref{sec:training_algo}. To define the objectives of this task, we borrow the following costs from \cite{pdff} that we would like to minimize together.
 
 \begin{itemize}
-	\item \textbf{Reach cost} $||{^W\mathbf{p}_{T, N}} - {^W}\mathbf{p}_{g}||^2$: The squared-distance between the end-effector and the goal positions at the end of the movement ($t = T$). This cost expresses that we want to reach the goal as closely as possible.
-	\item\textbf{Comfort cost} $\max(\mathbf{q}_T)$: A cost that corresponds to the largest angle over all  the joints, $1\leq n \leq N$, at the end of the movement. This cost expresses the desire for end-state comfort.
+	\item \textbf{Reach cost} $||{^W\mathbf{p}_{N}(T)} - {^W}\mathbf{p}_{\text{goal}}||^2$: The squared-distance between the end-effector and the goal positions at the end of the movement ($t = T$). This cost expresses that we want to reach the goal as closely as possible.
+	\item\textbf{Comfort cost} $\max(\mathbf{q}(T))$: A cost that corresponds to the largest angle over all  the joints, $1\leq n \leq N$, at the end of the movement. This cost expresses the desire for end-state comfort.
 	\item \textbf{Acceleration cost} $r_t$: At each time step $t$, this cost in (\ref{eqn:immediate_cost}) penalizes joint accelerations. The weighting term $(N+1-n)$ penalizes DOFs closer to the origin; the underlying motivation being that wrist movements are less costly than shoulder movements for humans.
 \end{itemize}
 
@@ -48,29 +48,29 @@ Thus, we have a terminal cost,
 
 \begin{equation}
 \label{eqn:terminal_cost}
-	C_T = k_T \cdot \left(||{^W\mathbf{p}_{T, N}} - {^W}\mathbf{p}_{g}||^2 + \max(\mathbf{q}_T)\right)
+	C_T = k_T ||{^W\mathbf{p}_{T, N}} - {^W}\mathbf{p}_{g}||^2 + \max(\mathbf{q}(T))
 \end{equation}
 
 and an immediate cost,
 
 \begin{equation}
 \label{eqn:immediate_cost}
-	r_t  =  k_t \cdot \frac{\sum_{n=1}^N (N+1-n)(\ddot{q}_{t, n})^2}{\sum_{n=1}^N (N+1-n)} \quad .
+	r_t  =  k_t \frac{\sum_{n=1}^N (N+1-n)(\ddot{q}_{t, n})^2}{\sum_{n=1}^N (N+1-n)}.
 \end{equation}
 
 Combining, we get the objective function,
 
 \begin{equation}
-	\tilde{J}(Q_{\text{dd}}) = C_T\left(\mathcal{K}(\mathbf{q}_T), {^W}\mathbf{p}_{g}, \mathbf{q}_T\right) + \sum_{t=0}^T r_t(\ddot{\mathbf{q}}_t),
+	\tilde{J}(Q_{\text{dd}}) = C_T\left(\mathcal{K}(\mathbf{q}(T)), {^W}\mathbf{p}_{\text{goal}}, \mathbf{q}(T)\right) + \sum_{t=0}^T r_t(\ddot{\mathbf{q}}_t)\Delta t,
 \end{equation}
 
 where, $\tilde{J}: \mathbb{R}^{N \times T} \rightarrow \mathbb{R}$ maps the joint accelerations over time, contained in matrix $Q_{\text{dd}}$, to a cost. The overall objective function $J: \mathbb{R}^{B \times N} \rightarrow \mathbb{R}$, accepts parameter matrices $\Theta \in \mathbb{R}^{B \times N}$ from the PDFF algorithm, transforms them to get $Q_{\text{dd}}$ by (\ref{eqn:dmp_theta_to_qdd}), and then returns corresponding costs. We call this process a roll-out, as the parameters directly correspond to the degree of joint accelerations in time and give rise to a reach trajectory that is simulated to then evaluate its quality based on the total cost. Note that the factors $k_T$ and $k_t$ in (\ref{eqn:terminal_cost}) and (\ref{eqn:immediate_cost}) have the purpose of acting as weights for relative prioritization of objectives and to scale and compensate for different ranges of values for the different cost components. For this project, similar to \cite{pdff}, the order of priorities is: reach close to the goal, achieve end-state comfort, and minimize acceleration.
 
 \section{Inputs}
-The inertial world frame $W$, the starting configuration $\mathbf{q}_S \in \mathbb{R}^N$, and the goal position ${^W}\mathbf{p}_{g} \in \mathbb{R}^p$ are the only required inputs for RTLA, or $\mathcal{R}_T$.
+The inertial world frame $W$, the starting configuration $\mathbf{q}(0) \in \mathbb{R}^N$, and the goal position ${^W}\mathbf{p}_{\text{goal}} \in \mathbb{R}^p$ are the only required inputs for RTLA.
 
 \section{Outputs}
-Given the above inputs, $\mathcal{R}_T$ will output accelerations in the joint space such that for $\mathbf{q}_T = \mathbf{q}_S + \int_0^T\int_0^{T}\ddot{\mathbf{q}}(t)\:dt\:dt$ we have $\mathcal{K}(\mathbf{q}_T) \approx {^W}\mathbf{p}_{g}$, ideally for any goal position in the robot's reachable space. The output $\ddot{\mathbf{q}}(t)$ constitutes the necessary information to carry out the reach action.
+Given the above inputs, RTLA will output accelerations in the joint space such that for $\mathbf{q}(T) = \mathbf{q}(0) + \int_0^T\int_0^{T}\ddot{\mathbf{q}}(t)\:dt\:dt$ we have $\mathcal{K}(\mathbf{q}(T)) \approx {^W}\mathbf{p}_{\text{goal}}$, ideally for any goal position in the robot's reachable space. The output $\ddot{\mathbf{q}}(t)$ constitutes the necessary information to carry out the reach action.
 
 \section{Training Algorithm}
 \label{sec:training_algo}
@@ -78,7 +78,7 @@ As noted before, a key result of \cite{pdff} was that PDFF arises during the sto
 
 \begin{equation}
 \label{eqn:dmp_theta_to_qdd}
-        \ddot{\mathbf{q}}^\intercal(t) = \mathbf{g}^\intercal(t)\Theta \quad .
+        \ddot{\mathbf{q}}(t) = \Theta^\top\mathbf{g}(t).
 \end{equation}
 
 Here $\mathbf{g}(t) \in \mathbb{R}^B$ is a vector of equally-spaced, time-dependent, and normalized radial-basis functions that together describe the joint space trajectory of each joint when scaled by the respective weights. Note that we constrain the number $B$ for suitable control over joint acceleration profiles. Larger $B$ implies finer control over joint trajectories, but also extra computation in $\text{PI}^{\text{BB}}$. Because of the fixed widths $w$ and center spacing $c_b$ for the basis functions, we have a time bound $T$ for representing the motion of a joint, and hence the reach action. The basis functions are given by,
@@ -88,7 +88,7 @@ Here $\mathbf{g}(t) \in \mathbb{R}^B$ is a vector of equally-spaced, time-depend
     [\mathbf{g}(t)]_b = \frac{\psi_b(t)}{\sum_{b=1}^{B} \psi_b(t)}, \text{ where } \psi_b(t) = \exp{\left(-\frac{(t-c_b)^2}{w^2}\right)} \quad .
 \end{equation}
 
-Note that since $\ddot{\mathbf{q}}$ is a continuous function, we discretize it into timesteps, $t \in [0, T]$. To extend this approach to the robot's reachable space, based on the learnt parameters for training start-goal pairs, we will develop a function approximator, called the Reach Task Model (RTM), that will estimate the parameter matrix $\Theta$ for a given starting pose and goal location, $\mathcal{R}_M: (\mathbf{q}_S, {^W}\mathbf{p}_{g}) \rightarrow \Theta$, such that ${^W}\mathbf{p}_{T,N} \approx {^W}\mathbf{p}_{g}$. This is the main component in the development of $\mathcal{R}_T$ and it operates in a simpler representation than most analytical methods, and hence shows promise for better generalization.
+Note that since $\ddot{\mathbf{q}}$ is a continuous function, we discretize it into timesteps, $t \in [0, T]$. To extend this approach to the robot's reachable space, based on the learnt parameters for training start-goal pairs, we will develop a function approximator, called the Reach Task Model (RTM), that will estimate the parameter matrix $\Theta$ for a given starting pose and goal location, $\text{RTM}: (\mathbf{q}_S, {^W}\mathbf{p}_{\text{goal}}) \rightarrow \Theta$, such that ${^W}\mathbf{p}_{N}(T) \approx {^W}\mathbf{p}_{\text{goal}}$. This is the main component in the development of RTLA and it operates in a simpler representation than most analytical methods, and hence shows promise for better generalization.
 
 \section{Potential Unique Contributions}
 In this project, we attempt to extend and generalize the PDFF-based reach learning method in \cite{pdff} to any robot, including $3-$dimensional multi-jointed arms, and for the entire reachable space, both of which, to our best knowledge, have not been attempted in literature. We have also abstracted the roll-out process for supporting dynamic simulations to get accurate evaluations of joint trajectories for deploying this algorithm on real robots. Lastly, this method has only been implemented in \texttt{MATLAB}, and as a first step, implementing the entire framework using \texttt{Python} and \texttt{C++} is itself a meaningful contribution as it can then be directly applied in real-world use cases.
