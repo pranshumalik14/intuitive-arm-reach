@@ -282,40 +282,57 @@ def PIBB(task_info, Theta, Sigma, init_condit, tol=1e-3, max_iter=1000):
     return Theta, iter_count, J_hist
 
 
-def gen_theta(x_target, init_condit, robot_arm):
+def gen_theta(
+    x_target, 
+    init_condit, 
+    robot_arm, 
+    **args
+    ):
     """
 
     """
-    lambda_init = lambda_min = 0.05
-    lambda_max = 5  # exploration levels; TODO: set λₘₐₓ acc. to need
-    # Sample data
-    B = 10
-    K = 20
+    lambda_init = 0.05  if args.get('lambda_init')  is None else args.get('lambda_init')
+    lambda_min  = 0.05  if args.get('lambda_min')   is None else args.get('lambda_min')
+    lambda_max  = 5     if args.get('lambda_max')   is None else args.get('lambda_max')
+    dt          = 1e-2  if args.get('dt')           is None else args.get('dt')
+    T           = 1     if args.get('T')            is None else args.get('T')
+    h           = 10    if args.get('h')            is None else args.get('h')
+    B           = 10    if args.get('B')            is None else args.get('B')
+    K           = 20    if args.get('K')            is None else args.get('K')
+
     N, _, _ = robot_arm.get_arm_params()
-
-    Sigma_matrix = np.array([lambda_init*np.eye(B) for i in range(N)])
-
     # Shape should be B * B * N but we have N * B * B -> indexing has to change accordingly
     # no default action to start with
-    Theta_matrix = np.zeros(B*N).reshape((B, N))
+    Theta_matrix = np.zeros(B*N).reshape((B, N)) if args.get('Theta_matrix') is None else args.get('Theta_matrix')
+    assert(isinstance(Theta_matrix, np.ndarray))
+    assert(Theta_matrix.shape == (B, N))
+
+    Sigma_matrix = np.array([lambda_init*np.eye(B) for i in range(N)]) if args.get('Sigma_matrix') is None else args.get('Sigma_matrix')
+    assert(isinstance(Sigma_matrix, np.ndarray))
+    assert(Sigma_matrix.shape == (N, B, B)) 
+    
 
     task_info = TaskInfo(
-        robotarm=robot_arm,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
-        B=B,
-        K=K,
-        N=N,
-        T=1,
-        h=10,
-        target_pos=x_target,
-        dt=1e-2
+        robotarm    =   robot_arm,
+        lambda_min  =   lambda_min,
+        lambda_max  =   lambda_max,
+        B           =   B,
+        K           =   K,
+        N           =   N,
+        T           =   T,
+        h           =   h,
+        target_pos  =   x_target,
+        dt          =   dt
     )
 
     Theta, iter_count, J_hist = PIBB(
-        task_info, Theta_matrix, Sigma_matrix, init_condit)
+        task_info, 
+        Theta_matrix, 
+        Sigma_matrix, 
+        init_condit
+        )
 
-    return Theta, iter_count, J_hist  # Theta, J_hist[-1]
+    return Theta, iter_count, J_hist
 
     """
     gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
