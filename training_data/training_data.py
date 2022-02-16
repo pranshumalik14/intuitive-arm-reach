@@ -92,7 +92,7 @@ def generate_random_init_joint_angle(robot_arm):
 
     return [joint_angles, joint_velocities]
 
-def gen_training_data(robot_arm, n_joint_config= 10):
+def gen_training_data(robot_arm, n_joint_config = 10):
     """
     - take in a robot arm, generate a CSV file with training data. This includes:
         - columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"] 
@@ -110,12 +110,12 @@ def gen_training_data(robot_arm, n_joint_config= 10):
     X_target, Y_target = generate_2D_target_pose(
         robot_arm,
         d_rho = 0.1,
-        d_phi = np.pi/5
+        d_phi = np.pi/8
         )
     assert(len(X_target) == len(Y_target))
     n_target_pts = len(X_target)
 
-    B = 10
+    B = 5
     N, _, _ = robot_arm.get_arm_params()
 
     columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"]
@@ -160,8 +160,8 @@ def gen_training_data(robot_arm, n_joint_config= 10):
 if __name__ == '__main__':
     # TODO: ask pranshu what Params are ideal for 2D Robot training
     robot_arm = rb.RobotArm2D(
-        n_dims = 3,
-        link_lengths=np.array([0.4, 0.5, 0.1])
+        n_dims = 2,
+        link_lengths=np.array([0.6, 0.4])
     )
 
     gen_training_data(robot_arm)
