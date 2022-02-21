@@ -46,6 +46,9 @@
 #define ST_READ_ARDUINO  1
 #define ST_GO_HOME       2
 #define ST_RESET_STATUS  3
+#define ST_CAMERA_CALIB  4
+
+#define DELAY 10
 
 Servo base;
 Servo shoulder;
@@ -135,7 +138,7 @@ void loop() {
           
           doc["JointConstraintStatus"] = (areJointConsMet) ? "OK" : "NOT OK";
           serializeJson(doc, Serial);
-      } else if(state == ST_GO_HOME){
+      } else if(state == ST_CAMERA_CALIB){
           q1 = 0;
           q2 = 15;
           q3 = 90;
@@ -144,6 +147,13 @@ void loop() {
           q6 = 10;
       } else if(state == ST_RESET_STATUS){
         areJointConsMet = true;
+      } else if(state == ST_GO_HOME){
+          q1 = 90;
+          q2 = 90;
+          q3 = 90;
+          q4 = 90; 
+          q5 = 90;
+          q6 = 10;
       }
 
       state = 0; // always wait for serial
@@ -160,5 +170,5 @@ void loop() {
       Braccio.ServoMovement(20, actual_q1, actual_q2, actual_q3, actual_q4, actual_q5, actual_q6);  
     }
     
-    delay(1000);
+    delay(DELAY);
 }

@@ -7,6 +7,7 @@ ST_WRITE_ARDUINO    = 0
 ST_READ_ARDUINO     = 1
 ST_GO_HOME          = 2
 ST_RESET_STATUS     = 3
+ST_CAMERA_CALIB     = 4
 
 JOINT_DESCRIPTORS = {
     "M1": "Base degrees:            Allowed values from 0 to 180 degrees",
@@ -49,6 +50,7 @@ class BraccioRobotDriver:
             self.connect(port)
         else:
             self.connect(self.port)
+        time.sleep(12)
 
     def is_connection_valid(self):
         try:
@@ -61,6 +63,7 @@ class BraccioRobotDriver:
         numpy array of joint angles
         """
         assert(len(joint_angles) == 6)
+        print("Attempting to do the motion: " + str(joint_angles))
         insts = [
             struct.pack('>B', ST_WRITE_ARDUINO),
             struct.pack('>B', (joint_angles[0])),
@@ -77,6 +80,9 @@ class BraccioRobotDriver:
     
     def homecoming(self):
         self.write(struct.pack('>B', ST_GO_HOME))
+
+    def vision_calib_pose(self):
+        self.write(struct.pack('>B', ST_CAMERA_CALIB))
 
     def read(self):
         self.cnx.reset_input_buffer()

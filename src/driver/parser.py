@@ -82,7 +82,6 @@ def parse_joint_angles(driver: BraccioRobotDriver, verbose = True):
 
     return joint_angles
 
-
 def accept_joint_angles(driver: BraccioRobotDriver):
     """
     read joint angles from the user and send them to the arduino connection
@@ -103,7 +102,6 @@ def accept_joint_angles(driver: BraccioRobotDriver):
         print(str(ex))
     except Exception as ex:
         print(str(ex))
-
 
 if __name__ == "__main__":
     braccio_driver = BraccioRobotDriver(
