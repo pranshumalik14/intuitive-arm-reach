@@ -5,10 +5,11 @@
 ##      Open CV and Numpy integration        ##
 ###############################################
 
-import pyrealsense2 as rs
-import numpy as np
-import cv2
 import time
+import cv2
+import numpy as np
+import pyrealsense2 as rs
+# import roboticstoolbox as rtb
 
 
 def keypoints_average(keypoints):
@@ -23,20 +24,17 @@ def keypoints_average(keypoints):
     return round(ave_x), round(ave_y)
 
 
-def blob_param():
+def blob_param(minArea=10, maxArea=10000):
     # blob params
     params = cv2.SimpleBlobDetector_Params()
 
     # thresholds
     params.filterByColor = False
-    params.minThreshold = 10
-    params.maxThreshold = 200
-    # params.thresholdStep = 20
 
     # filter by area
     params.filterByArea = True
-    params.minArea = 1
-    params.maxArea = 10000
+    params.minArea = minArea
+    params.maxArea = maxArea
 
     # filter by circularity
     params.filterByCircularity = False
@@ -103,6 +101,8 @@ def view_stream(pipeline, show_origin='True'):
         im_with_keypoints = cv2.drawKeypoints(infra_thresh, keypoints, None, color=(
             0, 0, 255), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
+        # todo: (optional) add weighted average of keypoints
+
         # Show keypoints
         # Show images
         if (show_origin == 'True'):
@@ -130,6 +130,7 @@ def view_stream(pipeline, show_origin='True'):
         cv2.imshow('Thresh', infra_thresh)
         cv2.waitKey(1)
     print("View stream completed")
+    pipeline.stop()
 
 
 def return_origin(pipeline):
@@ -150,7 +151,7 @@ def return_origin(pipeline):
     infra_thresh[150:250, 530:625] = infra_image[150:250, 530:625]
 
     # blob params
-    params = blob_param()
+    params = blob_param(minArea=10, maxArea=10000)
 
     # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
     infra_colormap = cv2.applyColorMap(infra_image, cv2.COLORMAP_HOT)
@@ -179,6 +180,77 @@ def calibrated_origin(pipeline):
     return round(ave_x), round(ave_y)
 
 
+def origin_transform(pipeline):
+    ox, oy = calibrated_origin(pipeline)
+    offset_x = 20
+    config = set_config()
+    pipeline.start(config)
+    frames = pipeline.wait_for_frames()
+    depth_frame = frames.get_depth_frame()
+    depth_intrnsc = depth_frame.profile.as_video_stream_profile().intrinsics
+    # depth_image = np.asanyarray(depth_frame.get_data())
+    depth_value = depth_frame.get_distance(ox-offset_x, oy)
+    depth_point = rs.rs2_deproject_pixel_to_point(
+        depth_intrnsc, [ox, oy], depth_value)
+    pipeline.stop()
+    return depth_point
+
+
+def detect_goal_position(pipeline):
+    config = set_config()
+    pipeline.start(config)
+
+    while True:
+        # Wait for a coherent pair of frames: depth and color
+        frames = pipeline.wait_for_frames()
+        color_frame = frames.get_color_frame()
+
+        # blob params
+        params = blob_param(minArea=500, maxArea=20000)
+
+        # apply threshold
+        lower_color_bounds = cv2.cv.Scalar(100, 0, 0)
+        upper_color_bounds = cv2.cv.Scalar(225, 80, 80)
+        gray = cv2.cvtColor(color_frame, cv2.COLOR_BGR2GRAY)
+        mask = cv2.inRange(color_frame, lower_color_bounds, upper_color_bounds)
+        mask_rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        color_frame = color_frame & mask_rgb
+
+        detector = cv2.SimpleBlobDetector_create(params)
+        keypoints = detector.detect(color_frame)
+
+        # Show keypoints
+        # Show images
+        ave_x, ave_y = keypoints_average(keypoints)
+        radius = 10
+        drawcolor = (0, 255, 0)  # Green
+        circlecenter = (ave_x, ave_y)
+        thickness = 2
+        image = cv2.circle(color_frame, circlecenter,
+                           radius, drawcolor, thickness)
+        image = cv2.line(image, (ave_x-25, ave_y),
+                         (ave_x+25, ave_y), drawcolor, thickness)
+        image = cv2.line(image, (ave_x, ave_y-25),
+                         (ave_x, ave_y+25), drawcolor, thickness)
+
+        cv2.namedWindow('Color', cv2.WINDOW_AUTOSIZE)
+        cv2.imshow('Color', color_frame)
+        cv2.waitKey(1)
+
+    pipeline.stop()
+    return ave_x, ave_y
+
+
+# def base_to_camera():
+#     Tx, Ty, Tz = 0.35, -0.33, 1.46  # translation values
+#     z_angle = -90
+#     x_angle = 180
+#     T = (transl(Tx, Ty, Tz) @ trotz(z_angle, 'deg') @ trotx(x_angle, 'deg')).inv()
+#     return T
+
+# main: run
 pipeline = rs.pipeline()
-print(calibrated_origin(pipeline))
-view_stream(pipeline)  # , show_origin = 'False')
+# print(origin_transform(pipeline))
+# print(calibrated_origin(pipeline))
+# view_stream(pipeline)
+detect_goal_position(pipeline)
