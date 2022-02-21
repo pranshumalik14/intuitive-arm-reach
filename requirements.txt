@@ -3,3 +3,4 @@ sympy
 numpy
 matplotlib
 pandas
+pyserial
