@@ -2,7 +2,7 @@ import time
 import cv2
 import numpy as np
 import pyrealsense2 as rs
-# import roboticstoolbox as rtb
+from spatialmath import *
 
 
 def keypoints_average(keypoints):
@@ -25,8 +25,12 @@ def blob_param(minArea=10, maxArea=10000):
     # blob params
     params = cv2.SimpleBlobDetector_Params()
 
+    params.minThreshold = 127
+    params.maxThreshold = 200
+
     # thresholds
-    params.filterByColor = False
+    params.filterByColor = True
+    params.blobColor = 255
 
     # filter by area
     params.filterByArea = True
@@ -41,6 +45,7 @@ def blob_param(minArea=10, maxArea=10000):
 
     # filter by inertia
     params.filterByInertia = False
+
     return params
 
 
@@ -84,7 +89,7 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
             infra_image, 50, 255, cv2.THRESH_BINARY)
         hsv_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
         goal_thresh = cv2.inRange(
-            hsv_image, (67, 127, 80), (180, 255, 255))
+            hsv_image, (96, 76, 86), (131, 255, 255))
 
         # show keypoints and robot base
         if (show_origin == 'True'):
@@ -147,10 +152,9 @@ def current_origin(pipeline):
     infra_thresh[150:250, 530:625] = infra_image[150:250, 530:625]
 
     # blob params
-    params = blob_param(minArea=10, maxArea=1000)
+    params = blob_param(minArea=5, maxArea=1000)
 
-    # apply colormap on depth image (image must be converted to 8-bit per pixel first)
-    infra_colormap = cv2.applyColorMap(infra_image, cv2.COLORMAP_HOT)
+    # apply threshold
     _, infra_thresh = cv2.threshold(
         infra_thresh, 50, 255, cv2.THRESH_BINARY)
 
@@ -174,13 +178,14 @@ def calibrated_origin(pipeline):
     return round(ave_x), round(ave_y)  # ox, oy
 
 
-def point_vision_pos(pipeline, ox, oy, y_px_offset=0):  # y_px_offset=30 for robot base
+# y_pix_offset=30 for robot base
+def vision2pixpoint_pos(pipeline, px, py, y_pix_offset=0):
     frames = pipeline.wait_for_frames()
     depth_frame = frames.get_depth_frame()
     depth_intrnsc = depth_frame.profile.as_video_stream_profile().intrinsics
-    depth_value = depth_frame.get_distance(ox, oy+y_px_offset)
+    depth_value = depth_frame.get_distance(px, py+y_pix_offset)
     depth_point = rs.rs2_deproject_pixel_to_point(
-        depth_intrnsc, [ox, oy], depth_value)
+        depth_intrnsc, [px, py], depth_value)
     return depth_point
 
 
@@ -191,12 +196,12 @@ def current_goal(pipeline):
     color_image = np.asanyarray(color_frame.get_data())
 
     # blob params
-    params = blob_param(minArea=50, maxArea=2000)
+    params = blob_param(minArea=50, maxArea=4000)
 
     # apply threshold
     hsv_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
     goal_thresh = cv2.inRange(
-        hsv_image, (67, 127, 80), (180, 255, 255))
+        hsv_image, (96, 76, 86), (131, 255, 255))
 
     detector = cv2.SimpleBlobDetector_create(params)
     keypoints = detector.detect(goal_thresh)
@@ -205,22 +210,35 @@ def current_goal(pipeline):
     return ave_x, ave_y, keypoints
 
 
-# def base_to_camera():
-#     Tx, Ty, Tz = 0.35, -0.33, 1.46  # translation values
-#     z_angle = -90
-#     x_angle = 180
-#     T = (transl(Tx, Ty, Tz) @ trotz(z_angle, 'deg') @ trotx(x_angle, 'deg')).inv()
-#     return T
+def origin2vision_frame(vision2origin_pos):
+    return (SE3(vision2origin_pos) * SE3.Rz(-np.pi/2) * SE3.Rx(np.pi)).inv()
+
+
+def origin2point_pos(vision2point_pos, vision2origin_pos):
+    return (origin2vision_frame(vision2origin_pos) * SE3(vision2point_pos)).t
+
+
+def origin2goal_pos(pipeline, vision2origin_pos):
+    gx, gy, _ = current_goal(pipeline)
+    vision2goal_pos = vision2pixpoint_pos(pipeline, gx, gy)
+    return origin2point_pos(vision2goal_pos, vision2origin_pos)
+
 
 # main: run
 pipeline = rs.pipeline()
 config = set_config()
 pipeline.start(config)
+# view_stream(pipeline)
 ox, oy = calibrated_origin(pipeline)
-print(point_vision_pos(pipeline, ox, oy, y_px_offset=30))
 print([ox, oy])
-gx, gy, _ = current_goal(pipeline)
-print(point_vision_pos(pipeline, gx, gy))
-view_stream(pipeline)
+vision2origin_pos = vision2pixpoint_pos(pipeline, ox, oy, y_pix_offset=30)
+print(vision2origin_pos)
+time.sleep(5)
+
+while True:
+    origin2goal = origin2goal_pos(pipeline, vision2origin_pos)
+    print(origin2goal)
+    time.sleep(0.5)
+
 pipeline.stop()
 cv2.destroyAllWindows()
