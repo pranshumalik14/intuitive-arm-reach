@@ -1,5 +1,6 @@
-import time
 import cv2
+import time
+import json
 import numpy as np
 import pyrealsense2 as rs
 from spatialmath import *
@@ -49,24 +50,35 @@ def blob_param(minArea=10, maxArea=10000):
     return params
 
 
+def load_presets(config, filename="src/vision/realsense_presets.json"):
+    vis_presets = json.load(open(filename))
+    pset_string = str(vis_presets).replace("'", '\"')
+
+    device = config.get_device()
+    advmod = rs.rs400_advanced_mode(device)
+    advmod.load_json(pset_string)
+    return
+
+
 def set_config():
     # set frame resolution
-    resolutionWidth = 848
-    resolutionHeight = 480
+    resolution_width = 848
+    resolution_height = 480
     frameRate = 30
     config = rs.config()
 
     # Get device product line for setting a supporting resolution
-    config.enable_stream(rs.stream.depth, resolutionWidth,
-                         resolutionHeight, rs.format.z16, frameRate)
-    config.enable_stream(rs.stream.color, resolutionWidth,
-                         resolutionHeight, rs.format.bgr8, frameRate)
-    config.enable_stream(rs.stream.infrared, 1, resolutionWidth,
-                         resolutionHeight, rs.format.y8, frameRate)
+    config.enable_stream(rs.stream.depth, resolution_width,
+                         resolution_height, rs.format.z16, frameRate)
+    config.enable_stream(rs.stream.color, resolution_width,
+                         resolution_height, rs.format.bgr8, frameRate)
+    config.enable_stream(rs.stream.infrared, 1, resolution_width,
+                         resolution_height, rs.format.y8, frameRate)
     return config
 
 
 def view_stream(pipeline, show_origin='True', show_goal='True'):
+    colorizer = rs.colorizer()
     while True:
         # wait for a coherent pair of frames: depth and color
         frames = pipeline.wait_for_frames()
@@ -77,13 +89,11 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
             continue
 
         # convert images to numpy arrays
-        depth_image = np.asanyarray(depth_frame.get_data())
+        depth_image = np.asanyarray(colorizer.colorize(depth_frame).get_data())
         color_image = np.asanyarray(color_frame.get_data())
         infra_image = np.asanyarray(infra_frame.get_data())
 
-        # apply colormap on depth image (image must be converted to 8-bit per pixel first)
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(
-            depth_image, alpha=0.03), cv2.COLORMAP_TURBO)
+        # apply colormap on infra image and apply HSV threshold to goal image
         infra_colormap = cv2.applyColorMap(infra_image, cv2.COLORMAP_HOT)
         _, infra_thresh = cv2.threshold(
             infra_image, 50, 255, cv2.THRESH_BINARY)
@@ -130,7 +140,7 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
         cv2.namedWindow('Goal', cv2.WINDOW_AUTOSIZE)
         cv2.imshow('Color', color_image)
         cv2.imshow('Infra', infra_colormap)
-        cv2.imshow('Depth', depth_colormap)
+        cv2.imshow('Depth', depth_image)
         cv2.imshow('Thresh', infra_thresh)
         cv2.imshow('Goal', goal_thresh)
         cv2.waitKey(1)
@@ -227,18 +237,20 @@ def origin2goal_pos(pipeline, vision2origin_pos):
 # main: run
 pipeline = rs.pipeline()
 config = set_config()
-pipeline.start(config)
-# view_stream(pipeline)
-ox, oy = calibrated_origin(pipeline)
-print([ox, oy])
-vision2origin_pos = vision2pixpoint_pos(pipeline, ox, oy, y_pix_offset=30)
-print(vision2origin_pos)
-time.sleep(5)
+config = pipeline.start(config)
+load_presets(config)
 
-while True:
-    origin2goal = origin2goal_pos(pipeline, vision2origin_pos)
-    print(origin2goal)
-    time.sleep(0.5)
+view_stream(pipeline)
+# ox, oy = calibrated_origin(pipeline)
+# print([ox, oy])
+# vision2origin_pos = vision2pixpoint_pos(pipeline, ox, oy, y_pix_offset=30)
+# print(vision2origin_pos)
+# time.sleep(5)
+
+# while True:
+#     origin2goal = origin2goal_pos(pipeline, vision2origin_pos)
+#     print(origin2goal)
+#     time.sleep(0.5)
 
 pipeline.stop()
 cv2.destroyAllWindows()
