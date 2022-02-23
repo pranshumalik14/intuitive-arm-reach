@@ -1,6 +1,10 @@
 from abc import abstractmethod
+from traceback import print_tb
 import numpy as np
 import roboticstoolbox as rtb
+from distutils.dir_util import copy_tree
+from os import path
+import os
 
 class RobotArm:
 
@@ -100,3 +104,52 @@ class RobotArm3D(rtb.DHRobot, RobotArm):
     def forward_kinematics(self, q):
         q = super().forward_kinematics(q)
         return self.fkine(q).t
+
+
+class Braccio(rtb.ERobot):
+
+    def __init__(self, xacro_dir):
+
+        links, name, urdf_string, urdf_filepath = self.URDF_read(
+            "braccio_description/urdf/braccio.urdf",
+            tld=xacro_dir
+        )
+
+        # super().__init__(
+        #     links,
+        #     name=name,
+        #     manufacturer="Arduino",
+        #     gripper_links=links[12],
+        #     urdf_string=urdf_string,
+        #     urdf_filepath=urdf_filepath,
+        # )
+
+# temp_dir = tf.mkdtemp()
+
+# xacro_dir = path.join(temp_dir, "custom_xacro_folder")
+
+# # Make xacro folder
+# mkdir(xacro_dir)
+
+xacro_dir = os.getcwd()
+print(xacro_dir)
+
+braccio_dir = path.join(xacro_dir, "braccio_description")
+print(braccio_dir)
+
+xacro_path = rtb.rtb_path_to_datafile("xacro", local = False)
+print(xacro_path)
+
+braccio_xacro = xacro_path / "braccio_description"
+if not os.path.isdir(braccio_dir):
+    os.mkdir(braccio_xacro)
+print(braccio_xacro)
+
+# Copy into temp franka directory
+copy_tree(braccio_xacro, braccio_dir)
+
+# Make our custom robot
+robot = Braccio(xacro_dir)
+# "braccio_description/urdf/braccio.urdf"
+
+
