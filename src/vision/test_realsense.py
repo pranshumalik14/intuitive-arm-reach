@@ -39,7 +39,9 @@ def blob_param(minArea=10, maxArea=10000):
     params.maxArea = maxArea
 
     # filter by circularity
-    params.filterByCircularity = False
+    params.filterByCircularity = True
+    params.minCircularity = 0.2
+    params.maxCircularity = 1.2
 
     # filter by convexity
     params.filterByConvexity = False
@@ -133,11 +135,21 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
             goal_thresh = cv2.drawKeypoints(goal_thresh, keypoints, None, color=(
                 0, 0, 255), flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-        cv2.namedWindow('Color', cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('Infra', cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('Depth', cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('Thresh', cv2.WINDOW_AUTOSIZE)
-        cv2.namedWindow('Goal', cv2.WINDOW_AUTOSIZE)
+        cv2.namedWindow('Color', cv2.WINDOW_NORMAL)
+        cv2.namedWindow('Infra', cv2.WINDOW_NORMAL)
+        cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
+        cv2.namedWindow('Thresh', cv2.WINDOW_NORMAL)
+        cv2.namedWindow('Goal', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Color', 530, 310)
+        cv2.resizeWindow('Infra', 530, 310)
+        cv2.resizeWindow('Depth', 530, 310)
+        cv2.resizeWindow('Thresh', 530, 310)
+        cv2.resizeWindow('Goal', 530, 310)
+        cv2.moveWindow('Color', 530, 155+15)
+        cv2.moveWindow('Infra', 0, 310+30)
+        cv2.moveWindow('Depth', 1060, 310+30)
+        cv2.moveWindow('Thresh', 0, 0)
+        cv2.moveWindow('Goal', 1060, 0)
         cv2.imshow('Color', color_image)
         cv2.imshow('Infra', infra_colormap)
         cv2.imshow('Depth', depth_image)
