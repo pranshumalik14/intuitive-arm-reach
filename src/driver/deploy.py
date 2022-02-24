@@ -10,11 +10,12 @@ q4_stream = np.array([90]*len(q1_stream))
 q5_stream = np.array([90]*len(q1_stream))
 q6_stream = np.array([10]*len(q1_stream))
 
-q_stream = np.array([q1_stream, q2_stream, q3_stream, q4_stream, q5_stream, q6_stream]).transpose()
+q_stream = np.array([q1_stream, q2_stream, q3_stream,
+                    q4_stream, q5_stream, q6_stream]).transpose()
 
 braccio_driver = BraccioRobotDriver(
-    loop_rate   = .04,
-    port        = 14301
+    loop_rate=.04,
+    port="5"
 )
 
 braccio_driver.calibrate()

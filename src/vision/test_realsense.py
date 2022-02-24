@@ -26,8 +26,8 @@ def blob_param(minArea=10, maxArea=10000):
     # blob params
     params = cv2.SimpleBlobDetector_Params()
 
-    params.minThreshold = 127
-    params.maxThreshold = 200
+    params.minThreshold = 200
+    params.maxThreshold = 255
 
     # thresholds
     params.filterByColor = True
@@ -39,9 +39,7 @@ def blob_param(minArea=10, maxArea=10000):
     params.maxArea = maxArea
 
     # filter by circularity
-    params.filterByCircularity = True
-    params.minCircularity = 0.2
-    params.maxCircularity = 1.2
+    params.filterByCircularity = False
 
     # filter by convexity
     params.filterByConvexity = False
@@ -81,6 +79,7 @@ def set_config():
 
 def view_stream(pipeline, show_origin='True', show_goal='True'):
     colorizer = rs.colorizer()
+
     while True:
         # wait for a coherent pair of frames: depth and color
         frames = pipeline.wait_for_frames()
@@ -101,7 +100,7 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
             infra_image, 50, 255, cv2.THRESH_BINARY)
         hsv_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
         goal_thresh = cv2.inRange(
-            hsv_image, (96, 76, 86), (131, 255, 255))
+            hsv_image, (96, 120, 86), (131, 255, 255))
 
         # show keypoints and robot base
         if (show_origin == 'True'):
@@ -145,17 +144,20 @@ def view_stream(pipeline, show_origin='True', show_goal='True'):
         cv2.resizeWindow('Depth', 530, 310)
         cv2.resizeWindow('Thresh', 530, 310)
         cv2.resizeWindow('Goal', 530, 310)
-        cv2.moveWindow('Color', 530, 155+15)
-        cv2.moveWindow('Infra', 0, 310+30)
-        cv2.moveWindow('Depth', 1060, 310+30)
-        cv2.moveWindow('Thresh', 0, 0)
-        cv2.moveWindow('Goal', 1060, 0)
+        cv2.moveWindow('Color', 70+530, 150+155+15)
+        cv2.moveWindow('Infra', 70+0, 150+310+30)
+        cv2.moveWindow('Depth', 70+1060, 150+310+30)
+        cv2.moveWindow('Thresh', 70+0, 150+0)
+        cv2.moveWindow('Goal', 70+1060, 150+0)
         cv2.imshow('Color', color_image)
         cv2.imshow('Infra', infra_colormap)
         cv2.imshow('Depth', depth_image)
         cv2.imshow('Thresh', infra_thresh)
         cv2.imshow('Goal', goal_thresh)
-        cv2.waitKey(1)
+
+        key = cv2.waitKey(30)
+        if key == ord('q') or key == 27:
+            break
     print("View stream completed")
 
 
@@ -174,7 +176,7 @@ def current_origin(pipeline):
     infra_thresh[150:250, 530:625] = infra_image[150:250, 530:625]
 
     # blob params
-    params = blob_param(minArea=5, maxArea=1000)
+    params = blob_param(minArea=10, maxArea=1000)
 
     # apply threshold
     _, infra_thresh = cv2.threshold(
@@ -218,12 +220,12 @@ def current_goal(pipeline):
     color_image = np.asanyarray(color_frame.get_data())
 
     # blob params
-    params = blob_param(minArea=50, maxArea=4000)
+    params = blob_param(minArea=40, maxArea=4000)
 
     # apply threshold
     hsv_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
     goal_thresh = cv2.inRange(
-        hsv_image, (96, 76, 86), (131, 255, 255))
+        hsv_image, (96, 120, 86), (131, 255, 255))
 
     detector = cv2.SimpleBlobDetector_create(params)
     keypoints = detector.detect(goal_thresh)
@@ -252,17 +254,17 @@ config = set_config()
 config = pipeline.start(config)
 load_presets(config)
 
-view_stream(pipeline)
-# ox, oy = calibrated_origin(pipeline)
-# print([ox, oy])
-# vision2origin_pos = vision2pixpoint_pos(pipeline, ox, oy, y_pix_offset=30)
-# print(vision2origin_pos)
-# time.sleep(5)
+# view_stream(pipeline)
+ox, oy = calibrated_origin(pipeline)
+print([ox, oy])
+vision2origin_pos = vision2pixpoint_pos(pipeline, ox, oy, y_pix_offset=30)
+print(vision2origin_pos)
+time.sleep(5)
 
-# while True:
-#     origin2goal = origin2goal_pos(pipeline, vision2origin_pos)
-#     print(origin2goal)
-#     time.sleep(0.5)
+while True:
+    origin2goal = origin2goal_pos(pipeline, vision2origin_pos)
+    print(origin2goal)
+    time.sleep(0.5)
 
 pipeline.stop()
 cv2.destroyAllWindows()

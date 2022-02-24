@@ -1,48 +1,28 @@
-# -*- coding: utf-8 -*-
-"""
-This is the example to execute the planar3DOF robot
-
-@author olmerg
-
-"""
-#import sys  
-#sys.path.insert(0, 'planar_3d')
-
+from roboticstoolbox.backends.swift import Swift
 from Braccio import Braccio
-
+from spatialmath import SE3
 import roboticstoolbox as rtb
 import numpy as np
-from math import pi
-import time
+from numpy import pi
 
-robot=Braccio()
-print(robot)
-print(robot.links)
+robot = Braccio()
 
-T =robot.fkine(robot.qz)
-print(T)
+print(robot.fkine([np.pi/2, np.pi/2, 0, 0, 0]).t)
 
-# robot.plot(q=robot.qz)
+Tend = SE3([1,  0,  0])
+q = robot.ikine_LM(Tend, mask=[1, 1, 1, 0, 0, 0])
+robot.q = q.q
+print(np.rad2deg(q.q))
+robot.plot(robot.q)
 
-
-# robot.plot(robot.qz,backend='swift')
-from roboticstoolbox.backends.swift import Swift
 env = Swift()
-env.launch(realTime = True)
-env.add(robot)
+# env.launch(realTime=True)
+# env.add(robot)
 
-# env.step(1.0)
+# qt = rtb.tools.trajectory.jtraj(np.array(
+#     [0, 0.3, pi/2, pi/2, pi/2]), np.array([pi/2, pi/2, pi, pi/2, pi/2]), 1000)
 
-
-qt = rtb.tools.trajectory.jtraj(np.array([0, 0.3, pi/2, pi/2, pi/2, 0.18, 1.28]), np.array([pi/2, pi/2, pi, pi/2, pi/2, 1.2, 2.3]), 1000)
-    
-for q in qt.q:
-         print(q)
-         robot.q=q
-         env.step(3)
-    # return to home
-
-
-# robot.teach(backend='pyplot')
+# for q in qt.q:
+#     robot.q = q
+#     env.step(3)
 env.hold()
-
