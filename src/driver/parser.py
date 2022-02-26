@@ -6,20 +6,25 @@ SUCCESS = 0
 FAILURE = 1
 
 HELP_MENU = {
-    "Help Menu:"  : "     Welcome to ECE496 PROJ353. This is the terminal software to control the Braccio Robot. The key commands to control the robot are as follows:",
-    "\tPress c:"  : "     To connect to the Arduino (Physical Robot)",
-    "\tPress a:"  : "     To control the joints of the robot",
-    "\tPress h:"  : "     To go home and calibrate the camera",
-    "\tPress i:"  : "     To print the help menu",
-    "\tPress r:"  : "     To print the current joint angles of the robot"
+    "Help Menu:": "     Welcome to ECE496 PROJ353. This is the terminal software to control the Braccio Robot. The key commands to control the robot are as follows:",
+    "\tPress c:": "     To connect to the Arduino (Physical Robot)",
+    "\tPress a:": "     To control the joints of the robot",
+    "\tPress h:": "     To go home and calibrate the camera",
+    "\tPress i:": "     To print the help menu",
+    "\tPress r:": "     To print the current joint angles of the robot"
 }
+
+
+# todo: fix float to int conversion; see bug on messenger!!!
 
 def print_help_menu():
     for key, value in HELP_MENU.items():
         print(key + value)
 
 # https://stackoverflow.com/a/34325723
-def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+
+
+def progressBar(iterable, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -33,11 +38,13 @@ def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, 
     """
     total = len(iterable)
     # Progress Bar Printing Function
-    def printProgressBar (iteration):
-        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+
+    def printProgressBar(iteration):
+        percent = ("{0:." + str(decimals) + "f}").format(100 *
+                                                         (iteration / float(total)))
         filledLength = int(length * iteration // total)
         bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
     # Initial Call
     printProgressBar(0)
     # Update Progress Bar
@@ -47,7 +54,8 @@ def progressBar(iterable, prefix = '', suffix = '', decimals = 1, length = 100, 
     # Print New Line on Complete
     print()
 
-def parse_joint_angles(driver: BraccioRobotDriver, verbose = True):
+
+def parse_joint_angles(driver: BraccioRobotDriver, verbose=True):
     """
     read joint angles passed into terminal
     """
@@ -82,6 +90,7 @@ def parse_joint_angles(driver: BraccioRobotDriver, verbose = True):
 
     return joint_angles
 
+
 def accept_joint_angles(driver: BraccioRobotDriver):
     """
     read joint angles from the user and send them to the arduino connection
@@ -91,7 +100,8 @@ def accept_joint_angles(driver: BraccioRobotDriver):
         joint_angle_ints = [int(r) for r in joint_angles]
         assert(len(joint_angle_ints) == 6)
         driver.set_joint_angles(joint_angle_ints)
-        status = SUCCESS if driver.read()["JointConstraintStatus"] == "OK" else FAILURE
+        status = SUCCESS if driver.read(
+        )["JointConstraintStatus"] == "OK" else FAILURE
         if status == FAILURE:
             driver.reset_joint_constraint_status()
         return status
@@ -103,34 +113,37 @@ def accept_joint_angles(driver: BraccioRobotDriver):
     except Exception as ex:
         print(str(ex))
 
+
 if __name__ == "__main__":
     braccio_driver = BraccioRobotDriver(
-        loop_rate = 1 
+        loop_rate=1
     )
 
     print_help_menu()
     while True:  # making a loop
         try:  # used try so that if user pressed other than the given key error will not be shown
             keypress = input()
-            if keypress == 'c':  # if key 'c' is pressed 
+            if keypress == 'c':  # if key 'c' is pressed
                 print("################     CALIBRATING     ################")
                 port = input("Enter port number: ")
                 braccio_driver.calibrate(port)
                 print("################ SUCCESSFULLY CONNECTED ################")
-                
 
             elif keypress == 'a':
                 if not braccio_driver.is_connection_valid():
-                    print("################ CANNOT ACCEPT JOINT ANGLES W/OUT ARDUINO CNX ################")
-                    print("################ Press 'c' first to calibrate ################")
+                    print(
+                        "################ CANNOT ACCEPT JOINT ANGLES W/OUT ARDUINO CNX ################")
+                    print(
+                        "################ Press 'c' first to calibrate ################")
                 else:
                     change_status = accept_joint_angles(braccio_driver)
                     if change_status == SUCCESS:
-                        print("################         REACH TASK: SUCCESSFUL      ################")
+                        print(
+                            "################         REACH TASK: SUCCESSFUL      ################")
                     elif change_status == FAILURE:
-                        print("################ REACH TASK: FAILED JOINT CONSTRAINTS ################")
+                        print(
+                            "################ REACH TASK: FAILED JOINT CONSTRAINTS ################")
 
-                    
             elif keypress == 'r':
                 print("################ READING FROM PORT ################")
                 str_returned = braccio_driver.read()
@@ -152,4 +165,3 @@ if __name__ == "__main__":
         except Exception as ex:
             print("EXCEPTION: " + str(ex))
             break  # if user pressed a key other than the given key the loop will break
-    
