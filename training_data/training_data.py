@@ -1,3 +1,4 @@
+import imp
 from os import sep
 import numpy as np
 import sys 
@@ -7,6 +8,7 @@ import robot_arm as rb
 from task_info import numpy_linspace
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import date, datetime
 
 def cart2pol(x, y):
     """
@@ -117,6 +119,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
 
     B = 5
     N, _, _ = robot_arm.get_arm_params()
+    task_info = None
 
     columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"]
     final_training_data = np.zeros(n_joint_config * n_target_pts * len(columns), dtype = object).reshape((n_joint_config* n_target_pts, len(columns)))
@@ -135,7 +138,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
             final_training_data[index, 1] = X_target[j]
             final_training_data[index, 2] = Y_target[j]
             
-            Theta_matrix, iter_count, J_hist = pdff_sim.gen_theta(
+            Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
                 x_target = np.array([X_target[j], Y_target[j]]),
                 init_condit = init_joint_angles,
                 robot_arm = robot_arm,
@@ -147,13 +150,20 @@ def gen_training_data(robot_arm, n_joint_config = 10):
             final_training_data[index, 4] = iter_count
             final_training_data[index, 5] = J_hist[-1]
 
+    task_info_df = task_info.to_pd()
     df = pd.DataFrame(
         data    = final_training_data,
         columns = columns
         )
 
+    time_str = datetime.now().strftime("%Y%m%d_%H%M")
+
     df.to_csv(
-        'sample_data_new.csv',
+        '{}_pibb_2D.csv'.format(time_str),
+        index = False
+    )
+    task_info_df.to_csv(
+        '{}_task_info.csv'.format(time_str),
         index = False
     )
 
@@ -164,7 +174,7 @@ if __name__ == '__main__':
         link_lengths=np.array([0.6, 0.4])
     )
 
-    gen_training_data(robot_arm)
+    gen_training_data(robot_arm, n_joint_config = 1)
 
 
 

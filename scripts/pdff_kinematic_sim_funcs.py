@@ -24,7 +24,7 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     n_dims_qdotdot = qdotdot.shape[1] if qdotdot.ndim > 1 else 1
 
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
-    assert(n_dims == n_dims_qdotdot)
+    # assert(n_dims == n_dims_qdotdot)
 
     time_steps = dt * np.arange(n_time_steps)
 
@@ -34,7 +34,7 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
 
     if init_condit is not None:
         q0, qdot0 = init_condit[0], init_condit[1]
-        assert(qdot.shape[1] == len(qdot0))
+        # assert(qdot.shape[1] == len(qdot0))
         qdot[0, :] = qdot0
         q[0, :] = q0
     else:
@@ -62,15 +62,20 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
 
     """
     # initial checks
-    assert(len(x_goal) == 2 and isinstance(robot_arm, RobotArm2D))
+    # assert(len(x_goal) == 2 and isinstance(robot_arm, RobotArm2D))
 
     # Get q and qdot
+
     time_steps, q, qdot, qdotdot = get_traj(
-        qdotdot, robot_arm, init_condit=init_condit, dt=dt)
+        qdotdot, 
+        robot_arm, 
+        dt,
+        init_condit = init_condit
+    )
     n_time_steps = len(time_steps)
 
     # Forward kinematics
-    link_positions = robot_arm.angles_to_link_positions(q)
+    [link_positions_x, link_positions_y] = robot_arm.angles_to_link_positions(q)
 
     # Robot params
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
@@ -113,12 +118,11 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     # animation for each frame
     def animate(i):
         # all x axis values are in the even-numbered columns
-        thisx = [link_positions[i, j]
-                 for j in range(0, len(link_positions[0, :]), 2)]
-
+        # thisx = [link_positions[i, j] for j in range(0, len(link_positions[0, :]), 2)]
+        thisx = link_positions_x[i, :] # get the current row of joint angles (x vals)
         # all y axis value are in the odd-numbered columns
-        thisy = [link_positions[i, j]
-                 for j in range(1, len(link_positions[0, :]), 2)]
+        # thisy = [link_positions[i, j] for j in range(1, len(link_positions[0, :]), 2)]
+        thisy = link_positions_y[i, :] # get the current row of joint angles (y vals)
 
         if i == 0:
             history_x.clear()
@@ -137,16 +141,16 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
         for n in range(n_dims):
             annotate_links[n].set_position(
                 (
-                    link_positions[i, 2*n] + offset_factor *
+                    link_positions_x[i, n] + offset_factor *
                     link_lengths[n]*np.cos(q[i, n]),
-                    link_positions[i, 2*n+1] + offset_factor *
+                    link_positions_x[i, n] + offset_factor *
                     link_lengths[n]*np.sin(q[i, n])
                 )
             )
 
         annotate_end_effector.set_position((
-            link_positions[i, len(link_positions[0, :])-2],
-            link_positions[i, -1]
+            link_positions_x[i, -1],
+            link_positions_y[i, -1]
         ))
 
         return line, trace, time_text
@@ -332,7 +336,7 @@ def gen_theta(
         init_condit
         )
 
-    return Theta, iter_count, J_hist
+    return Theta, iter_count, J_hist, task_info
 
     """
     gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)

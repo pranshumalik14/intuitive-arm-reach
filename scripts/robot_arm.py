@@ -5,6 +5,7 @@ import roboticstoolbox as rtb
 from distutils.dir_util import copy_tree
 from os import path
 import os
+import pandas as pd
 
 class RobotArm:
 
@@ -29,7 +30,7 @@ class RobotArm2D(RobotArm):
         self.link_lengths = link_lengths
         # Sample input: np.array([2, 0.6, 0.4, 0.15, 0.15, 0.1])
 
-    def get_arm_params(self):  # TODO: remove relative link lengths
+    def get_arm_params(self):  
         return self.n_dims, self.arm_length, self.link_lengths
 
     def forward_kinematics(self, q):
@@ -77,6 +78,18 @@ class RobotArm2D(RobotArm):
         #     link_positions[:, 2*n+1] = links_y[:, n]
 
         return [links_x, links_y]
+
+    def to_df(self):
+        df = {}
+        df["n_dims"]        = self.n_dims
+        df["arm_length"]    = self.arm_length
+        df["link_lenghts"]  = self.link_lengths
+
+        return pd.DataFrame.from_dict(data = df, orient = "index").transpose()
+
+def robot2D_from_df(df):
+    return RobotArm2D(df["n_dims"], df["link_lenghts"])
+
 
 
 class RobotArm3D(rtb.DHRobot, RobotArm):
@@ -131,25 +144,25 @@ class Braccio(rtb.ERobot):
 # # Make xacro folder
 # mkdir(xacro_dir)
 
-xacro_dir = os.getcwd()
-print(xacro_dir)
+# xacro_dir = os.getcwd()
+# print(xacro_dir)
 
-braccio_dir = path.join(xacro_dir, "braccio_description")
-print(braccio_dir)
+# braccio_dir = path.join(xacro_dir, "braccio_description")
+# print(braccio_dir)
 
-xacro_path = rtb.rtb_path_to_datafile("xacro", local = False)
-print(xacro_path)
+# xacro_path = rtb.rtb_path_to_datafile("xacro", local = False)
+# print(xacro_path)
 
-braccio_xacro = xacro_path / "braccio_description"
-if not os.path.isdir(braccio_dir):
-    os.mkdir(braccio_xacro)
-print(braccio_xacro)
+# braccio_xacro = xacro_path / "braccio_description"
+# if not os.path.isdir(braccio_dir):
+#     os.mkdir(braccio_xacro)
+# print(braccio_xacro)
 
-# Copy into temp franka directory
-copy_tree(braccio_xacro, braccio_dir)
+# # Copy into temp franka directory
+# copy_tree(braccio_xacro, braccio_dir)
 
-# Make our custom robot
-robot = Braccio(xacro_dir)
-# "braccio_description/urdf/braccio.urdf"
+# # Make our custom robot
+# robot = Braccio(xacro_dir)
+# # "braccio_description/urdf/braccio.urdf"
 
 
