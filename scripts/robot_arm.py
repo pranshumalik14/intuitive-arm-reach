@@ -45,8 +45,7 @@ class RobotArm2D(RobotArm):
                 np.cos(sum_angles) * self.link_lengths[i_dim]
             links_y[i_dim + 1] = links_y[i_dim] + \
                 np.sin(sum_angles) * self.link_lengths[i_dim]
-
-        return np.array(links_x[-1], links_y[-1])
+        return [links_x[-1], links_y[-1]]
 
     def angles_to_link_positions(self, q):
         # TODO: have to test this, or remove if it wont be used
@@ -86,12 +85,6 @@ class RobotArm2D(RobotArm):
         df["link_lenghts"]  = self.link_lengths
 
         return pd.DataFrame.from_dict(data = df, orient = "index").transpose()
-
-def robot2D_from_df(df):
-    return RobotArm2D(df["n_dims"], df["link_lenghts"])
-
-
-
 class RobotArm3D(rtb.DHRobot, RobotArm):
     def __init__(self, name, DHDescription, qz, qr, meshdir):
         super().__init__(DHDescription, name=name, meshdir=meshdir)

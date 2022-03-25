@@ -5,10 +5,8 @@ import robot_arm as rb
 
 def numpy_linspace(start, stop, step):
     return np.linspace(start, stop, int((stop-start)/step) + 1)
-
-
 class TaskInfo:
-    def __init__(self, robotarm, lambda_min, lambda_max, B, K, N, T, h, target_pos, dt):
+    def __init__(self, robotarm, lambda_min, lambda_max, B, K, N, T, h, target_pos, dt, w = None, cs = None):
         self.robotarm = robotarm
         self.lambda_min = lambda_min
         self.lambda_max = lambda_max
@@ -20,11 +18,17 @@ class TaskInfo:
         self.dt = dt
         self.target_pos = target_pos
 
-        self.w = T / (2 * B)
+        if w is None:
+            self.w = T / (2 * B)
+        else:
+            self.w = w
 
-        def gen_cs(w, T):
-            return w + numpy_linspace(0, T, 2*w)  # step is 2*w
-        self.cs = gen_cs(self.w, T)
+        if cs is None:
+            def gen_cs(w, T):
+                return w + numpy_linspace(0, T, 2*w)  # step is 2*w
+            self.cs = gen_cs(self.w, T)
+        else:
+            self.cs = cs
 
     def get_robot_arm(self):
         return self.robotarm
@@ -71,6 +75,7 @@ class TaskInfo:
         df_dict["B"]          = self.B
         df_dict["K"]          = self.K
         df_dict["dt"]         = self.dt
+        df_dict["T"]          = self.T
         df_dict["N"]          = self.N
         df_dict["h"]          = self.h
         df_dict["w"]          = self.w
@@ -81,19 +86,5 @@ class TaskInfo:
             dtype=object, 
             orient = 'index'
             ).transpose()
-
-def from_pd(df):
-    return TaskInfo(
-        robotarm = rb.robot2D_from_df(df["robot_arm"]),
-        lambda_min = df["lambda_min"],
-        lambda_max = df["lambda_max"],
-        B = df["B"],
-        K = df["K"],
-        N = df["N"],
-        T = df["T"],
-        h = df["h"],  # eliteness param
-        dt = df["dt"],
-        target_pos = df["target_pos"]
-    )
 
 

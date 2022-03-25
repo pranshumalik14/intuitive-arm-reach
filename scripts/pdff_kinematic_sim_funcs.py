@@ -56,7 +56,6 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
 
     return time_steps, q, qdot, qdotdot
 
-
 def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     """
 
@@ -76,7 +75,6 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
 
     # Forward kinematics
     [link_positions_x, link_positions_y] = robot_arm.angles_to_link_positions(q)
-
     # Robot params
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
 
@@ -167,7 +165,6 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
 
     return time_steps, q, qdot, qdotdot, ani
 
-
 def eval_rollout(task_info, Theta_matrix, init_condit):
     T = task_info.get_T()
     dt = task_info.get_dt()
@@ -184,35 +181,25 @@ def eval_rollout(task_info, Theta_matrix, init_condit):
     return cost_function(target_pos, gen_q, gen_qdotdot, robot_arm)
 
 
-def boundcovar(Sigma, lambda_min, lambda_max, qr_factorization=True):
-    factorization = None
-    factorization_inv = None
-    eigvals, eigvecs = LA.eig(Sigma)
-
-    if qr_factorization:
-        Q, _ = LA.qr(Sigma)
-        factorization = Q
-        factorization_inv = Q.transpose()
-    else:
-        factorization = eigvecs
-        factorization_inv = LA.inv(eigvecs)
-
+def boundcovar(Sigma, lambda_min, lambda_max):
+    Q, _ = LA.qr(Sigma)
+    eigvals, _ = LA.eig(Sigma)
     eigvals = np.clip(eigvals, lambda_min, lambda_max)
-
     Sigma = np.matmul(
-        factorization,
+        Q, 
         np.matmul(
-            eigvals*np.eye(len(eigvals)),
-            factorization_inv
+            eigvals*np.eye(len(eigvals)), 
+            Q.transpose() 
         )
     )
 
     return Sigma + 1e-12*np.eye(len(eigvals))
-# https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
+    # https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
 
 
 def PIBB(task_info, Theta, Sigma, init_condit, tol=1e-3, max_iter=1000):
     print("######################### PIBB Algorithm Started #########################")
+    print(init_condit)
     start_time = time.time()
 
     lambda_min = task_info.get_lambda_min()
@@ -328,14 +315,14 @@ def gen_theta(
         target_pos  =   x_target,
         dt          =   dt
     )
-
+    print(Theta_matrix)
     Theta, iter_count, J_hist = PIBB(
         task_info, 
         Theta_matrix, 
         Sigma_matrix, 
         init_condit
         )
-
+    print(Theta)
     return Theta, iter_count, J_hist, task_info
 
     """
@@ -344,6 +331,11 @@ def gen_theta(
     time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate2d(
         gen_qdotdot, robot_arm, x_target, init_condit = init_condit, dt = 0.01)
     plt.show()
+    from IPython import display
+    video = ani.to_jshtml(fps = 60)
+    # video = ani.to_html5_video() # to save as mp4, use this
+    html = display.HTML(video)
+    display.display(html)
     """
 
 
@@ -358,13 +350,3 @@ def training_data_gen(robot_arm):
     Theta, _ = gen_theta(x_target, init_condit, robot_arm)
 
     return Theta
-
-
-if __name__ == '__main__':
-    robot_arm = RobotArm2D(
-        n_dims=3,
-        arm_length=1.0,
-        rel_link_lengths=np.array([0.6, 0.3, 0.1])
-    )
-
-    training_data_gen(robot_arm)

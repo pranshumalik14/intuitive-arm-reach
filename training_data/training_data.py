@@ -1,4 +1,6 @@
 import imp
+from logging.handlers import WatchedFileHandler
+from mimetypes import init
 from os import sep
 import numpy as np
 import sys 
@@ -44,7 +46,8 @@ def generate_2D_target_pose(robot_arm, d_rho = 0.01, d_phi = (np.pi/10)):
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
     R = arm_length
 
-    first_link_length = link_lengths[0]
+    first_link_length = R
+    # first_link_length = link_lengths[0]
 
     ds = d_phi * R
 
@@ -119,6 +122,8 @@ def gen_training_data(robot_arm, n_joint_config = 10):
 
     B = 5
     N, _, _ = robot_arm.get_arm_params()
+    dict_visited = dict.fromkeys(range(n_target_pts))
+
     task_info = None
 
     columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"]
@@ -129,8 +134,8 @@ def gen_training_data(robot_arm, n_joint_config = 10):
         init_joint_angles = generate_random_init_joint_angle(robot_arm)
         # init_joint_angles_str = np.array2string(init_joint_angles[0], separator="|") # want only joint angles, not velocity since it is 0
 
-        # Theta matrix is set to 0 everytime starting from new joint. TODO: ask Pranshu
         Theta_matrix = np.zeros(B*N).reshape((B, N))
+        # Theta matrix is set to 0 everytime starting from new joint. TODO: ask Pranshu
         for j in range(n_target_pts):
 
             index = (i * n_target_pts) + j
@@ -146,6 +151,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
                 N = N,
                 Theta_matrix = Theta_matrix 
             )
+
             final_training_data[index, 3] = Theta_matrix
             final_training_data[index, 4] = iter_count
             final_training_data[index, 5] = J_hist[-1]
@@ -166,12 +172,13 @@ def gen_training_data(robot_arm, n_joint_config = 10):
         '{}_task_info.csv'.format(time_str),
         index = False
     )
+    
 
 if __name__ == '__main__':
     # TODO: ask pranshu what Params are ideal for 2D Robot training
     robot_arm = rb.RobotArm2D(
-        n_dims = 2,
-        link_lengths=np.array([0.6, 0.4])
+        n_dims = 3,
+        link_lengths = np.array([0.6, 0.3, 0.1])
     )
 
     gen_training_data(robot_arm, n_joint_config = 1)
