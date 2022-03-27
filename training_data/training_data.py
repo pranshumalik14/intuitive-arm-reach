@@ -148,7 +148,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
     X_target, Y_target = generate_2D_target_pose(
         robot_arm,
         d_rho = 0.1,
-        d_phi = np.pi/16
+        d_phi = np.pi/128
         )
 
     visualize_target_poses(X_target, Y_target)
@@ -209,7 +209,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
 
         Theta_matrix = np.zeros(B*N).reshape((B, N))
         for j in range(n_target_pts//2):
-            index = n_target_pts//2 + (i * n_target_pts) + j + 1
+            index = n_target_pts//2 + (i * n_target_pts) + j 
             final_training_data[index, 0] = init_joint_angles[0]
             final_training_data[index, 1] = X_buf_ccw[j]
             final_training_data[index, 2] = Y_buf_ccw[j]
