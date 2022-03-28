@@ -81,19 +81,15 @@ end
 begin
 	x_train = pos_joints |> matrixtotuple
 	y_train = thetas |> matrixtotuple
-	model = Chain(rbf(n+2, 100), rbf(100, 500), Dense(500, 100, relu), rbf(100, 200), 
-		Dense(200, n*B))
-	# model = Chain(Dense(n+2, 50, relu), Dense(50, 50, relu), Dense(50, n*B))
+	# model = Chain(rbf(n+2, 100), rbf(100, 500), Dense(500, 100, relu), rbf(100, 200), Dense(200, n*B))
+	model = Chain(rbf(n+2, 1000), Dense(1000, 1000), rbf(1000, 500), Dense(500, n*B))
 	loss(x, y) = Flux.mse(model(x), y)
-	# learning_rate = 0.1
 	optimizer = ADAM()
 	n_epochs  = 500
 	nn_surrogate = NeuralSurrogate(x_train, y_train, lb, ub, model=model, loss=loss, 
 		opt=optimizer, n_echos=n_epochs)
+	test_error = mean([norm(nn_surrogate(x_train[i]) - thetas[i, :])^2 for i in 1:N-1])
 end
-
-# ╔═╡ 99d0e473-f21b-4fdc-8115-7a81722f8dcc
-test_error = mean(norm(nn_surrogate(x_train[i]) - thetas[i, :])^2 for i in 1:N-1)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -957,6 +953,5 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═bfecdc51-a472-490c-b8bb-48b903b2f52e
 # ╟─3f47f344-4f9f-42d3-90fb-470990cf678a
 # ╠═b83114c6-75f3-49d4-8d84-879c2f1182fd
-# ╠═99d0e473-f21b-4fdc-8115-7a81722f8dcc
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
