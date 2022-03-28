@@ -91,6 +91,15 @@ begin
 	test_error = mean([norm(nn_surrogate(x_train[i]) - thetas[i, :])^2 for i in 1:N-1])
 end
 
+# ╔═╡ 22d65d97-c95b-4148-9f91-51efd0c88b8b
+md"
+
+For avoiding cell process kill run this file in a Julia terminal instead: `julia surrogates_testing.jl`.
+"
+
+# ╔═╡ e0356d79-3b09-45e3-97db-9cf0e8c30d10
+print(test_error)
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -953,5 +962,7 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═bfecdc51-a472-490c-b8bb-48b903b2f52e
 # ╟─3f47f344-4f9f-42d3-90fb-470990cf678a
 # ╠═b83114c6-75f3-49d4-8d84-879c2f1182fd
+# ╟─22d65d97-c95b-4148-9f91-51efd0c88b8b
+# ╠═e0356d79-3b09-45e3-97db-9cf0e8c30d10
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
