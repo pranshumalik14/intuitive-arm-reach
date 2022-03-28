@@ -82,7 +82,7 @@ begin
 	x_train = pos_joints |> matrixtotuple
 	y_train = thetas |> matrixtotuple
 	# model = Chain(rbf(n+2, 100), rbf(100, 500), Dense(500, 100, relu), rbf(100, 200), Dense(200, n*B))
-	model = Chain(rbf(n+2, 1000), Dense(1000, 1000), rbf(1000, 500), Dense(500, n*B))
+	model = Chain(rbf(n+2, N*N), Dense(N*N, n*B))
 	loss(x, y) = Flux.mse(model(x), y)
 	optimizer = ADAM()
 	n_epochs  = 500
