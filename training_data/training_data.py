@@ -28,7 +28,22 @@ def pol2cart(rho, phi):
     y = rho * np.sin(phi)
     return (x, y)
 
-def generate_2D_target_pose(robot_arm, d_rho = 0.01, d_phi = (np.pi/10)):
+def generate_2D_target_pose_on_circle(rho, ds):
+    Xs, Ys = [], []
+    for s in numpy_linspace(0, 2*np.pi*rho, ds):
+        phi = s/rho
+
+        # print("Rho is : {} and Phi is: {}".format(rho, phi))
+        x, y = pol2cart(rho, phi)
+        # print("X coord is : {} and Y coord is: {}".format(x, y))
+        Xs.append(x)
+        Ys.append(y)   
+    
+    assert(len(Xs) == len(Ys))
+
+    return np.array(Xs), np.array(Ys)
+
+def generate_2D_target_pose(robot_arm, d_rho = 0.01, d_phi = (np.pi/10), closest_reach_radius_factor = 1/3):
     """
     Generate a continuously sampled space for target poses, for a 2D Robot arm.
     Target poses belong to circles with a minimum radius of the first link of the robot arm and are further incremented by d_rho
@@ -46,27 +61,30 @@ def generate_2D_target_pose(robot_arm, d_rho = 0.01, d_phi = (np.pi/10)):
     n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
     R = arm_length
 
-    first_link_length = R
-    # first_link_length = link_lengths[0]
+    # first_link_length = R
+    n_circles = 0
+    n_target_pts = 0
+    closest_reach_radius = link_lengths[0] * closest_reach_radius_factor
 
+    # s = R*theta
+    # hence ds = R*d_theta
     ds = d_phi * R
 
     Xs, Ys = [], []
-    # want concentric circles that
+    # want concentric circles
 
-    for rho in numpy_linspace(first_link_length, R, d_rho):
-        # s = R*theta
-        # hence ds = R*d_theta
-        for s in numpy_linspace(0, 2*np.pi*rho, ds):
-            phi = s/rho
+    for rho in numpy_linspace(closest_reach_radius, R, d_rho):
+        X_circle, Y_circle = generate_2D_target_pose_on_circle(rho, ds)
+        
+        Xs.append(X_circle)
+        Ys.append(Y_circle)
+        # Indication circle is over, now new circle
+        n_target_pts = n_target_pts + len(X_circle)
+        n_circles = n_circles + 1 
 
-            # print("Rho is : {} and Phi is: {}".format(rho, phi))
-            x, y = pol2cart(rho, phi)
-            # print("X coord is : {} and Y coord is: {}".format(x, y))
-            Xs.append(x)
-            Ys.append(y)    
-    
-    return np.array(Xs), np.array(Ys)
+    assert(len(Xs) == len(Ys))
+
+    return Xs, Ys, n_target_pts
 
 
 def iterate_circular(buf, start_index, iter_by, cw=True):
@@ -109,8 +127,11 @@ def visualize_target_poses(Xs, Ys):
     # )
 
     # Xs, Ys = generate_2D_target_pose(robot_arm)
-
-    plt.scatter(Xs, Ys)
+    # X(s) -> len -> n_circles
+    for i in range(len(Xs)):
+        plt.scatter(Xs[i], Ys[i])
+    
+    plt.axis('square')
     plt.savefig('training_data_sc_plot(1).png')
 
 def generate_random_init_joint_angle(robot_arm):
@@ -145,16 +166,15 @@ def gen_training_data(robot_arm, n_joint_config = 10):
         - n_joint_config: number of initial joint configurations
 
     """
-    X_target, Y_target = generate_2D_target_pose(
+    circles_x, circles_y, n_target_pts = generate_2D_target_pose(
         robot_arm,
-        d_rho = 0.1,
+        d_rho = 0.05,
         d_phi = np.pi/128
         )
+    
+    n_circles = len(circles_x)
 
-    visualize_target_poses(X_target, Y_target)
-
-    assert(len(X_target) == len(Y_target))
-    n_target_pts = len(X_target)
+    visualize_target_poses(circles_x, circles_y)
 
     B = 5
     N, _, _ = robot_arm.get_arm_params()
@@ -164,6 +184,7 @@ def gen_training_data(robot_arm, n_joint_config = 10):
 
     columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"]
     final_training_data = np.zeros(n_joint_config * n_target_pts * len(columns), dtype = object).reshape((n_joint_config* n_target_pts, len(columns)))
+    index = 0
 
     for i in range(n_joint_config):
         # TODO: add multiprocessing or using numpy efficient iterators
@@ -176,77 +197,65 @@ def gen_training_data(robot_arm, n_joint_config = 10):
         # call forward kinematics here, to determine the closest point
         x_ee, y_ee = robot_arm.forward_kinematics(init_joint_angles[0])
 
-        closest_idx = find_closest_target_pt(X_target, Y_target, x_ee, y_ee)
+        for circle_idx in range(n_circles):
+            X_target = circles_x[circle_idx]
+            Y_target = circles_y[circle_idx]
 
-        # Get x,y cw
-        X_buf_cw = iterate_circular(X_target, closest_idx, n_target_pts//2, cw=True)
-        Y_buf_cw = iterate_circular(Y_target, closest_idx, n_target_pts//2, cw=True)
+            n_pts_on_circle = len(X_target)
+            closest_idx = find_closest_target_pt(X_target, Y_target, x_ee, y_ee)
 
-        # Get x,y ccw
-        X_buf_ccw = iterate_circular(X_target, closest_idx, n_target_pts//2, cw=False)
-        Y_buf_ccw = iterate_circular(Y_target, closest_idx, n_target_pts//2, cw=False)
+            # Get x,y cw
+            X_buf_cw = iterate_circular(X_target, closest_idx, n_pts_on_circle//2, cw=True)
+            Y_buf_cw = iterate_circular(Y_target, closest_idx, n_pts_on_circle//2, cw=True)
 
+            # Get x,y ccw
+            X_buf_ccw = iterate_circular(X_target, closest_idx, n_pts_on_circle//2, cw=False)
+            Y_buf_ccw = iterate_circular(Y_target, closest_idx, n_pts_on_circle//2, cw=False)
 
-        Theta_matrix = np.zeros(B*N).reshape((B, N))
-        for j in range(n_target_pts//2):
-            index = (i * n_target_pts) + j
-            final_training_data[index, 0] = init_joint_angles[0]
-            final_training_data[index, 1] = X_buf_cw[j]
-            final_training_data[index, 2] = Y_buf_cw[j]
-            
-            Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-                x_target = np.array([X_buf_cw[j], Y_buf_cw[j]]),
-                init_condit = init_joint_angles,
-                robot_arm = robot_arm,
-                B = B,
-                N = N,
-                Theta_matrix = Theta_matrix 
-            )
+            Theta_matrix = np.zeros(B*N).reshape((B, N))
 
-            final_training_data[index, 3] = Theta_matrix
-            final_training_data[index, 4] = iter_count
-            final_training_data[index, 5] = J_hist[-1]
+            # go through CW points
+            for j in range(n_pts_on_circle//2):
+                final_training_data[index, 0] = init_joint_angles[0]
+                final_training_data[index, 1] = X_buf_cw[j]
+                final_training_data[index, 2] = Y_buf_cw[j]
+                
+                Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
+                    x_target = np.array([X_buf_cw[j], Y_buf_cw[j]]),
+                    init_condit = init_joint_angles,
+                    robot_arm = robot_arm,
+                    B = B,
+                    N = N,
+                    Theta_matrix = Theta_matrix 
+                )
 
-        Theta_matrix = np.zeros(B*N).reshape((B, N))
-        for j in range(n_target_pts//2):
-            index = n_target_pts//2 + (i * n_target_pts) + j 
-            final_training_data[index, 0] = init_joint_angles[0]
-            final_training_data[index, 1] = X_buf_ccw[j]
-            final_training_data[index, 2] = Y_buf_ccw[j]
-            
-            Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-                x_target = np.array([X_buf_ccw[j], Y_buf_ccw[j]]),
-                init_condit = init_joint_angles,
-                robot_arm = robot_arm,
-                B = B,
-                N = N,
-                Theta_matrix = Theta_matrix 
-            )
+                final_training_data[index, 3] = Theta_matrix
+                final_training_data[index, 4] = iter_count
+                final_training_data[index, 5] = J_hist[-1]
 
-            final_training_data[index, 3] = Theta_matrix
-            final_training_data[index, 4] = iter_count
-            final_training_data[index, 5] = J_hist[-1]
-        # Theta_matrix = np.zeros(B*N).reshape((B, N))
-        # # Theta matrix is set to 0 everytime starting from new joint. TODO: ask Pranshu
-        # for j in range(n_target_pts):
+                index = index + 1
 
-        #     index = (i * n_target_pts) + j
-        #     final_training_data[index, 0] = init_joint_angles[0]
-        #     final_training_data[index, 1] = X_target[j]
-        #     final_training_data[index, 2] = Y_target[j]
-            
-        #     Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-        #         x_target = np.array([X_target[j], Y_target[j]]),
-        #         init_condit = init_joint_angles,
-        #         robot_arm = robot_arm,
-        #         B = B,
-        #         N = N,
-        #         Theta_matrix = Theta_matrix 
-        #     )
+            # Go through CCW points
+            Theta_matrix = np.zeros(B*N).reshape((B, N))
+            for j in range(n_pts_on_circle//2):
+                final_training_data[index, 0] = init_joint_angles[0]
+                final_training_data[index, 1] = X_buf_ccw[j]
+                final_training_data[index, 2] = Y_buf_ccw[j]
+                
+                Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
+                    x_target = np.array([X_buf_ccw[j], Y_buf_ccw[j]]),
+                    init_condit = init_joint_angles,
+                    robot_arm = robot_arm,
+                    B = B,
+                    N = N,
+                    Theta_matrix = Theta_matrix 
+                )
 
-        #     final_training_data[index, 3] = Theta_matrix
-        #     final_training_data[index, 4] = iter_count
-        #     final_training_data[index, 5] = J_hist[-1]
+                final_training_data[index, 3] = Theta_matrix
+                final_training_data[index, 4] = iter_count
+                final_training_data[index, 5] = J_hist[-1]
+
+                index = index + 1
 
     task_info_df = task_info.to_pd()
     df = pd.DataFrame(
@@ -273,7 +282,7 @@ if __name__ == '__main__':
         link_lengths = np.array([0.6, 0.3, 0.1])
     )
 
-    gen_training_data(robot_arm, n_joint_config = 1)
+    gen_training_data(robot_arm, n_joint_config = 10)
 
 
 
