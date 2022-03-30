@@ -105,11 +105,11 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     time_text = ax.text(0.05, 0.9, '', transform=ax.transAxes)
 
     # Annotations for each link/end effector
-    annotate_links = []
-    for n in range(n_dims):
-        link_to_annotate = "q{}".format(str(1+n))
-        annotate_links.append(ax.annotate(
-            link_to_annotate, xy=(link_lengths[n], 0)))
+    # annotate_links = []
+    # for n in range(n_dims):
+    #     link_to_annotate = "q{}".format(str(1+n))
+    #     annotate_links.append(ax.annotate(
+    #         link_to_annotate, xy=(link_lengths[n], 0)))
 
     annotate_end_effector = ax.annotate('E', xy=(link_lengths[-1], 0))
 
@@ -136,15 +136,16 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
         time_text.set_text(time_template % (i*dt))
 
         offset_factor = 0.3
-        for n in range(n_dims):
-            annotate_links[n].set_position(
-                (
-                    link_positions_x[i, n] + offset_factor *
-                    link_lengths[n]*np.cos(q[i, n]),
-                    link_positions_x[i, n] + offset_factor *
-                    link_lengths[n]*np.sin(q[i, n])
-                )
-            )
+        # This annotates the links but it wasn't keepin up in the animation
+        # for n in range(n_dims):
+        #     annotate_links[n].set_position(
+        #         (
+        #             link_positions_x[i, n] + offset_factor *
+        #             link_lengths[n]*np.cos(q[i, n]),
+        #             link_positions_x[i, n] + offset_factor *
+        #             link_lengths[n]*np.sin(q[i, n])
+        #         )
+        #     )
 
         annotate_end_effector.set_position((
             link_positions_x[i, -1],
@@ -161,7 +162,8 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     plt.plot(x_goal[0], x_goal[1], '-o')  # Goal position
     ax.annotate('x_g', xy=(x_goal[0], x_goal[1]))
 
-    fig.suptitle('Kinematic Simulation', fontsize=14)
+    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
+    fig.suptitle('Kinematic Simulation: \n' + annotation_str, fontsize=8)
 
     return time_steps, q, qdot, qdotdot, ani
 
