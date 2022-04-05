@@ -1,5 +1,6 @@
 import numpy as np
 from roboticstoolbox.robot.ERobot import ERobot
+from spatialmath import SE3
 import os
 
 
@@ -18,20 +19,15 @@ class Braccio(ERobot):
 
         self.manufacturer = "Arduino"
         self.ee_links = self.ee_links[0]
+        self.tool = SE3([0.08, 0, 0])
 
         # zero angles, L shaped pose
-        self.addconfiguration("qz", np.array(
-            [np.pi/2, np.pi/4, np.pi, np.pi, np.pi/2]))
+        self.addconfiguration("qz", np.deg2rad(
+            [90, 145, 0, 0, 90]))
 
         # ready pose, arm up
-        self.addconfiguration("qr", np.array(
-            [np.pi/2, np.pi/4, np.pi, np.pi, np.pi/2]))
-
-        # # straight and horizontal
-        # self.addconfiguration("qs", np.array([0, 0, -pi/2]))
-
-        # # nominal table top picking pose
-        # self.addconfiguration("qn", np.array([0, pi/4, pi]))
+        self.addconfiguration("qr", np.deg2rad(
+            [0, 90, 90, 90, 90]))
 
     @staticmethod
     def load_my_path():
