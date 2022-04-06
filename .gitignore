@@ -9,6 +9,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+arm_reach/*
+robotics-toolbox-python/*
+
 # C extensions
 *.so
 
