@@ -1,17 +1,32 @@
+# Sys imports
 from datetime import date, datetime
-import matplotlib.pyplot as plt
-import pandas as pd
-from task_info import numpy_linspace
-import robot_arm as rb
-import pdff_kinematic_sim_funcs as pdff_sim
+import time
 import imp
 from logging.handlers import WatchedFileHandler
 from mimetypes import init
+
 from os import sep
 import numpy as np
+
+from pathlib import Path
+import uuid
+import multiprocessing
+from joblib import Parallel, delayed
+
 import sys
 sys.path.append('../scripts')
 
+# Installed lib imports
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Code-base imports
+from task_info import numpy_linspace
+import robot_arm as rb
+import pdff_kinematic_sim_funcs as pdff_sim
+
+time_str = datetime.now().strftime("%Y%m%d_%H%M")
+columns = ["init_joint_angles", "x_target", "y_target", "Theta", "iter_count", "cost"]
 
 def cart2pol(x, y):
     """
@@ -21,7 +36,6 @@ def cart2pol(x, y):
     phi = np.arctan2(y, x)
     return (rho, phi)
 
-
 def pol2cart(rho, phi):
     """
     Convert polar coordinates into cartesian
@@ -29,7 +43,6 @@ def pol2cart(rho, phi):
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return (x, y)
-
 
 def generate_2D_target_pos_on_circle(rho, ds):
     Xs, Ys = [], []
@@ -45,7 +58,6 @@ def generate_2D_target_pos_on_circle(rho, ds):
     assert(len(Xs) == len(Ys))
 
     return np.array(Xs), np.array(Ys)
-
 
 def generate_2D_target_pos(robot_arm, d_rho=0.01, d_phi=(np.pi/10), closest_reach_radius_factor=1/3):
     """
@@ -90,7 +102,6 @@ def generate_2D_target_pos(robot_arm, d_rho=0.01, d_phi=(np.pi/10), closest_reac
 
     return Xs, Ys, n_target_pts
 
-
 def iterate_circular(buf, start_index, iter_by, cw=True):
     buf_size = len(buf)
     ret = []
@@ -102,7 +113,6 @@ def iterate_circular(buf, start_index, iter_by, cw=True):
             index = (start_index + i) % buf_size
         ret.append(buf[index])
     return np.array(ret)
-
 
 def find_closest_target_pt(X_target, Y_target, x_ee, y_ee):
     n_target_pts = len(X_target)
@@ -126,13 +136,7 @@ def find_closest_target_pt(X_target, Y_target, x_ee, y_ee):
 
     return closest_idx
 
-
 def visualize_target_poses(Xs, Ys):
-    # robot_arm = rb.RobotArm2D(
-    #     n_dims = 3,
-    #     link_lengths=np.array([0.4, 0.5, 0.1])
-    # )
-
     # Xs, Ys = generate_2D_target_pos(robot_arm)
     # X(s) -> len -> n_circles
     for i in range(len(Xs)):
@@ -140,7 +144,6 @@ def visualize_target_poses(Xs, Ys):
 
     plt.axis('square')
     plt.savefig('training_data_scatter.png')
-
 
 def generate_random_init_joint_angle(robot_arm):
     """
@@ -159,6 +162,103 @@ def generate_random_init_joint_angle(robot_arm):
 
     return [joint_angles, joint_velocities]
 
+def save_file(df : pd.DataFrame):
+    output_file = '{}.csv'.format(uuid.uuid4().hex)
+    output_dir = Path(time_str + "/")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_dir / output_file, index = False)  # can join path elements with / operator
+
+def explore_random_joint_angles(circles_x, circles_y, robot_arm : rb.RobotArm2D):
+    n_circles = len(circles_x)
+
+    init_joint_angles = generate_random_init_joint_angle(robot_arm)
+    # init_joint_angles_str = np.array2string(init_joint_angles[0], separator="|") # want only joint angles, not velocity since it is 0
+
+    print("Initial joint angles are :")
+    print(init_joint_angles[0])
+
+    # call forward kinematics here, to determine the closest point
+    x_ee, y_ee = robot_arm.forward_kinematics(init_joint_angles[0])
+
+    B = 5
+    N, _, _ = robot_arm.get_arm_params()
+
+
+    for circle_idx in range(n_circles):
+        print("############### CIRCLE NO: {}/{} ###############".format(circle_idx+1, n_circles+1))
+        X_target = circles_x[circle_idx]
+        Y_target = circles_y[circle_idx]
+
+        n_pts_on_circle = len(X_target)
+        
+        index = 0
+        final_training_data = np.zeros(n_pts_on_circle * len(columns), dtype=object).reshape((n_pts_on_circle, len(columns)))
+
+        closest_idx = find_closest_target_pt(
+            X_target, Y_target, x_ee, y_ee)
+
+        # Get x,y cw
+        X_buf_cw = iterate_circular(
+            X_target, closest_idx, n_pts_on_circle//2, cw=True)
+        Y_buf_cw = iterate_circular(
+            Y_target, closest_idx, n_pts_on_circle//2, cw=True)
+
+        # Get x,y ccw
+        X_buf_ccw = iterate_circular(
+            X_target, closest_idx, n_pts_on_circle//2, cw=False)
+        Y_buf_ccw = iterate_circular(
+            Y_target, closest_idx, n_pts_on_circle//2, cw=False)
+
+        Theta_matrix = np.zeros(B*N).reshape((B, N))
+
+        # go through CW points
+        for j in range(n_pts_on_circle//2):
+            final_training_data[index, 0] = init_joint_angles[0]
+            final_training_data[index, 1] = X_buf_cw[j]
+            final_training_data[index, 2] = Y_buf_cw[j]
+
+            Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
+                x_target=np.array([X_buf_cw[j], Y_buf_cw[j]]),
+                init_condit=init_joint_angles,
+                robot_arm=robot_arm,
+                B=B,
+                N=N,
+                Theta_matrix=Theta_matrix
+            )
+
+            final_training_data[index, 3] = Theta_matrix
+            final_training_data[index, 4] = iter_count
+            final_training_data[index, 5] = J_hist[-1]
+
+            index = index + 1
+
+        # Go through CCW points
+        Theta_matrix = np.zeros(B*N).reshape((B, N))
+        for j in range(n_pts_on_circle//2):
+            final_training_data[index, 0] = init_joint_angles[0]
+            final_training_data[index, 1] = X_buf_ccw[j]
+            final_training_data[index, 2] = Y_buf_ccw[j]
+
+            Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
+                x_target=np.array([X_buf_ccw[j], Y_buf_ccw[j]]),
+                init_condit=init_joint_angles,
+                robot_arm=robot_arm,
+                B=B,
+                N=N,
+                Theta_matrix=Theta_matrix
+            )
+
+            final_training_data[index, 3] = Theta_matrix
+            final_training_data[index, 4] = iter_count
+            final_training_data[index, 5] = J_hist[-1]
+
+            index = index + 1
+    
+        df = pd.DataFrame(
+            data=final_training_data,
+            columns=columns
+        )
+        save_file(df)
 
 def gen_training_data(robot_arm, n_joint_config=10):
     """
@@ -178,117 +278,21 @@ def gen_training_data(robot_arm, n_joint_config=10):
     circles_x, circles_y, n_target_pts = generate_2D_target_pos(
         robot_arm,
         d_rho=0.05,
-        d_phi=np.pi/128
+        d_phi=np.pi/64
     )
-
-    n_circles = len(circles_x)
 
     visualize_target_poses(circles_x, circles_y)
 
-    B = 5
-    N, _, _ = robot_arm.get_arm_params()
-    dict_visited = dict.fromkeys(range(n_target_pts))
-
     task_info = None
 
-    columns = ["init_joint_angles", "x_target",
-               "y_target", "Theta", "iter_count", "cost"]
-    final_training_data = np.zeros(n_joint_config * n_target_pts * len(
-        columns), dtype=object).reshape((n_joint_config * n_target_pts, len(columns)))
-    index = 0
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(circles_x, circles_y, robot_arm) for i in range(n_joint_config))
 
-    for i in range(n_joint_config):
-        # TODO: add multiprocessing or using numpy efficient iterators
-        init_joint_angles = generate_random_init_joint_angle(robot_arm)
-        # init_joint_angles_str = np.array2string(init_joint_angles[0], separator="|") # want only joint angles, not velocity since it is 0
-
-        print("Initial joint angles are :")
-        print(init_joint_angles[0])
-
-        # call forward kinematics here, to determine the closest point
-        x_ee, y_ee = robot_arm.forward_kinematics(init_joint_angles[0])
-
-        for circle_idx in range(n_circles):
-            X_target = circles_x[circle_idx]
-            Y_target = circles_y[circle_idx]
-
-            n_pts_on_circle = len(X_target)
-            closest_idx = find_closest_target_pt(
-                X_target, Y_target, x_ee, y_ee)
-
-            # Get x,y cw
-            X_buf_cw = iterate_circular(
-                X_target, closest_idx, n_pts_on_circle//2, cw=True)
-            Y_buf_cw = iterate_circular(
-                Y_target, closest_idx, n_pts_on_circle//2, cw=True)
-
-            # Get x,y ccw
-            X_buf_ccw = iterate_circular(
-                X_target, closest_idx, n_pts_on_circle//2, cw=False)
-            Y_buf_ccw = iterate_circular(
-                Y_target, closest_idx, n_pts_on_circle//2, cw=False)
-
-            Theta_matrix = np.zeros(B*N).reshape((B, N))
-
-            # go through CW points
-            for j in range(n_pts_on_circle//2):
-                final_training_data[index, 0] = init_joint_angles[0]
-                final_training_data[index, 1] = X_buf_cw[j]
-                final_training_data[index, 2] = Y_buf_cw[j]
-
-                Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-                    x_target=np.array([X_buf_cw[j], Y_buf_cw[j]]),
-                    init_condit=init_joint_angles,
-                    robot_arm=robot_arm,
-                    B=B,
-                    N=N,
-                    Theta_matrix=Theta_matrix
-                )
-
-                final_training_data[index, 3] = Theta_matrix
-                final_training_data[index, 4] = iter_count
-                final_training_data[index, 5] = J_hist[-1]
-
-                index = index + 1
-
-            # Go through CCW points
-            Theta_matrix = np.zeros(B*N).reshape((B, N))
-            for j in range(n_pts_on_circle//2):
-                final_training_data[index, 0] = init_joint_angles[0]
-                final_training_data[index, 1] = X_buf_ccw[j]
-                final_training_data[index, 2] = Y_buf_ccw[j]
-
-                Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-                    x_target=np.array([X_buf_ccw[j], Y_buf_ccw[j]]),
-                    init_condit=init_joint_angles,
-                    robot_arm=robot_arm,
-                    B=B,
-                    N=N,
-                    Theta_matrix=Theta_matrix
-                )
-
-                final_training_data[index, 3] = Theta_matrix
-                final_training_data[index, 4] = iter_count
-                final_training_data[index, 5] = J_hist[-1]
-
-                index = index + 1
-
-    task_info_df = task_info.to_pd()
-    df = pd.DataFrame(
-        data=final_training_data,
-        columns=columns
-    )
-
-    time_str = datetime.now().strftime("%Y%m%d_%H%M")
-
-    df.to_csv(
-        '{}_pibb_2D.csv'.format(time_str),
-        index=False
-    )
-    task_info_df.to_csv(
-        '{}_task_info.csv'.format(time_str),
-        index=False
-    )
+    # task_info_df = task_info.to_pd()
+    # task_info_df.to_csv(
+    #     '{}_task_info.csv'.format(time_str),
+    #     index=False
+    # )
 
 
 if __name__ == '__main__':
@@ -297,5 +301,6 @@ if __name__ == '__main__':
         n_dims=3,
         link_lengths=np.array([0.6, 0.3, 0.1])
     )
-
-    gen_training_data(robot_arm, n_joint_config=10)
+    start = time.process_time()
+    gen_training_data(robot_arm, n_joint_config=2)
+    print("Time taken : {}".format(time.process_time() - start))

@@ -317,14 +317,14 @@ def gen_theta(
         target_pos  =   x_target,
         dt          =   dt
     )
-    print(Theta_matrix)
+    # print(Theta_matrix)
     Theta, iter_count, J_hist = PIBB(
         task_info, 
         Theta_matrix, 
         Sigma_matrix, 
         init_condit
         )
-    print(Theta)
+    # print(Theta)
     return Theta, iter_count, J_hist, task_info
 
     """
