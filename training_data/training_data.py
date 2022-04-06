@@ -168,7 +168,7 @@ def save_file(df : pd.DataFrame):
     output_dir.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_dir / output_file, index = False)  # can join path elements with / operator
 
-def explore_random_joint_angles(circles_x, circles_y, n_target_pts : int, robot_arm : rb.RobotArm2D):
+def explore_random_joint_angles(circles_x, circles_y, robot_arm : rb.RobotArm2D):
     n_circles = len(circles_x)
 
     init_joint_angles = generate_random_init_joint_angle(robot_arm)
@@ -183,13 +183,17 @@ def explore_random_joint_angles(circles_x, circles_y, n_target_pts : int, robot_
     B = 5
     N, _, _ = robot_arm.get_arm_params()
 
-    final_training_data = np.zeros(n_target_pts * len(columns), dtype=object).reshape((n_target_pts, len(columns)))
-    index = 0
+
     for circle_idx in range(n_circles):
+        print("############### CIRCLE NO: {}/{} ###############".format(circle_idx+1, n_circles+1))
         X_target = circles_x[circle_idx]
         Y_target = circles_y[circle_idx]
 
         n_pts_on_circle = len(X_target)
+        
+        index = 0
+        final_training_data = np.zeros(n_pts_on_circle * len(columns), dtype=object).reshape((n_pts_on_circle, len(columns)))
+
         closest_idx = find_closest_target_pt(
             X_target, Y_target, x_ee, y_ee)
 
@@ -249,11 +253,12 @@ def explore_random_joint_angles(circles_x, circles_y, n_target_pts : int, robot_
             final_training_data[index, 5] = J_hist[-1]
 
             index = index + 1
-    df = pd.DataFrame(
-        data=final_training_data,
-        columns=columns
-    )
-    save_file(df)
+    
+        df = pd.DataFrame(
+            data=final_training_data,
+            columns=columns
+        )
+        save_file(df)
 
 def gen_training_data(robot_arm, n_joint_config=10):
     """
@@ -273,7 +278,7 @@ def gen_training_data(robot_arm, n_joint_config=10):
     circles_x, circles_y, n_target_pts = generate_2D_target_pos(
         robot_arm,
         d_rho=0.05,
-        d_phi=np.pi/128
+        d_phi=np.pi/64
     )
 
     visualize_target_poses(circles_x, circles_y)
@@ -281,7 +286,7 @@ def gen_training_data(robot_arm, n_joint_config=10):
     task_info = None
 
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(circles_x, circles_y, n_target_pts, robot_arm) for i in range(n_joint_config))
+    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(circles_x, circles_y, robot_arm) for i in range(n_joint_config))
 
     # task_info_df = task_info.to_pd()
     # task_info_df.to_csv(
@@ -297,5 +302,5 @@ if __name__ == '__main__':
         link_lengths=np.array([0.6, 0.3, 0.1])
     )
     start = time.process_time()
-    gen_training_data(robot_arm, n_joint_config=10)
+    gen_training_data(robot_arm, n_joint_config=2)
     print("Time taken : {}".format(time.process_time() - start))
