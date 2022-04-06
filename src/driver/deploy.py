@@ -3,7 +3,7 @@ from robot_driver import BraccioRobotDriver
 import time
 
 
-q1_stream = np.arange(0, 90, 2)
+q1_stream = np.arange(0, 92, 2)
 q2_stream = np.array([145]*len(q1_stream))
 q3_stream = np.array([0]*len(q1_stream))
 q4_stream = np.array([0]*len(q1_stream))
