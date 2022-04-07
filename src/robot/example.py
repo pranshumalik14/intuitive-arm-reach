@@ -8,7 +8,10 @@ import time
 robot = Braccio()
 env = Swift()
 
-q = [90, 145, 0, 90]
+print(robot)
+
+q = [65, 45, 38, 87]
+# q = [90, 145, 0, 90]
 print(robot.fkine(np.deg2rad(q)).t)
 
 ik_start_time = time.time()

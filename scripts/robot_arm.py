@@ -7,6 +7,9 @@ from os import path
 import os
 import pandas as pd
 
+import sys
+sys.path.append("../src/robot/")
+from Braccio import Braccio
 class RobotArm:
 
     @abstractmethod
@@ -111,51 +114,47 @@ class RobotArm3D(rtb.DHRobot, RobotArm):
         q = super().forward_kinematics(q)
         return self.fkine(q).t
 
+# class Braccio(rtb.ERobot):
 
-class Braccio(rtb.ERobot):
+#     def __init__(self, xacro_dir):
 
-    def __init__(self, xacro_dir):
+#         links, name, urdf_string, urdf_filepath = self.URDF_read(
+#             "braccio_description/urdf/braccio.urdf",
+#             tld=xacro_dir
+#         )
 
-        links, name, urdf_string, urdf_filepath = self.URDF_read(
-            "braccio_description/urdf/braccio.urdf",
-            tld=xacro_dir
-        )
+#         # super().__init__(
+#         #     links,
+#         #     name=name,
+#         #     manufacturer="Arduino",
+#         #     gripper_links=links[12],
+#         #     urdf_string=urdf_string,
+#         #     urdf_filepath=urdf_filepath,
+#         # )
 
-        # super().__init__(
-        #     links,
-        #     name=name,
-        #     manufacturer="Arduino",
-        #     gripper_links=links[12],
-        #     urdf_string=urdf_string,
-        #     urdf_filepath=urdf_filepath,
-        # )
+class Braccio3D(RobotArm, Braccio):
+    def __init__(self):
+        super().__init__()
+        self.n_dims = 4
+        # TODO: figure out if needed
+        self.link_lengths = [-1, -1, -1, -1]
+        self.arm_length = sum(self.link_lengths)
 
-# temp_dir = tf.mkdtemp()
+    def get_arm_params(self):  
+        return self.n_dims, self.arm_length, self.link_lengths
 
-# xacro_dir = path.join(temp_dir, "custom_xacro_folder")
+    def forward_kinematics(self, q):
+        # Before we were returning just list of size two, now it's three, does that affect PIBB code?
+        q = super().forward_kinematics(q)
+        return self.fkine(q).t
 
-# # Make xacro folder
-# mkdir(xacro_dir)
+    def angles_to_link_positions(self, q):
+        pass
 
-# xacro_dir = os.getcwd()
-# print(xacro_dir)
+    def to_df(self):
+        df = {}
+        df["n_dims"]        = self.n_dims
+        df["arm_length"]    = self.arm_length
+        df["link_lenghts"]  = self.link_lengths
 
-# braccio_dir = path.join(xacro_dir, "braccio_description")
-# print(braccio_dir)
-
-# xacro_path = rtb.rtb_path_to_datafile("xacro", local = False)
-# print(xacro_path)
-
-# braccio_xacro = xacro_path / "braccio_description"
-# if not os.path.isdir(braccio_dir):
-#     os.mkdir(braccio_xacro)
-# print(braccio_xacro)
-
-# # Copy into temp franka directory
-# copy_tree(braccio_xacro, braccio_dir)
-
-# # Make our custom robot
-# robot = Braccio(xacro_dir)
-# # "braccio_description/urdf/braccio.urdf"
-
-
+        return pd.DataFrame.from_dict(data = df, orient = "index").transpose()
