@@ -37,7 +37,17 @@ if __name__ == "__main__":
         orig2vis_frame = None
         state = "calibrate_origin"
 
-        while vis_msg != "vision_exiting":
+        def check_procexit_wait():
+            if main_driverproc_pipe.poll():
+                vis_msg = main_driverproc_pipe.recv()
+            elif keyboard.is_pressed("q") or keyboard.is_pressed("esc"):
+                print("[MAIN] Received Vision Kill Request")
+                main_driverproc_pipe.send("vision_stop")
+                # vis_msg = main_driverproc_pipe.recv()
+                state = "vision_terminated"
+            time.sleep(0.2)
+
+        while state != "vision_terminated":
             if state == "calibrate_origin":
                 main_driverproc_pipe.send("vision_calib_orig2vis_frame")
                 orig2vis_frame = main_driverproc_pipe.recv()
@@ -48,24 +58,24 @@ if __name__ == "__main__":
                 goal_pos = main_driverproc_pipe.recv()
                 print("[MAIN] Current Goal: {}".format(goal_pos))
 
+                # todo: make sure goal is within semi-sphere
                 # make sure not invalid (i.e. [-1, -1, -1])
-                if (goal_pos == np.array([-1, -1, -1])).all():
+                if np.array_equal(goal_pos, np.array([-1, -1, -1])):
                     print("[MAIN] Goal Invalid (Skipped)")
+                    check_procexit_wait()
                     continue
 
                 # get current joint config
-                curr_q = np.array(braccio_driver.read()['joint_angles'])
-                print("[MAIN] Current Joint Configuration: {}".format(curr_q))
+                deg_q = np.array(braccio_driver.read()['joint_angles'])
+                print("[MAIN] Current Joint Configuration: {}".format(deg_q))
+                rad_q = np.deg2rad(deg_q)
 
                 # send problem to reach solver and make robot go to goal pos
                 if SOLVER == "IK":
                     q_sol = np.rad2deg(
-                        braccio.ikine_min(
-                            SE3(goal_pos),
-                            qlim=True
-                        ).q
+                        braccio.inverse_kinematics(goal_pos, rad_q)
                     ).astype(int)
-                    q_sol = np.append(q_sol, curr_q[-2:])
+                    q_sol = np.append(q_sol, deg_q[-2:])
                     braccio_driver.set_joint_angles(q_sol)
                 elif SOLVER == "RTA":
                     raise NotImplementedError  # todo
@@ -74,19 +84,11 @@ if __name__ == "__main__":
                 else:
                     raise ValueError("Invalid Solver")
 
-            if main_driverproc_pipe.poll():
-                vis_msg = main_driverproc_pipe.recv()
-            elif keyboard.is_pressed("q") or keyboard.is_pressed("esc"):
-                print("[MAIN] Received Vision Kill Request")
-                main_driverproc_pipe.send("vision_stop")
-                vis_msg = main_driverproc_pipe.recv()
-                state = "vision_terminated"
-
-            time.sleep(0.5)
-            # todo: make robot 4dof.
+                check_procexit_wait()
 
         vision_worker.join()
         vision_worker.close()
+
     elif MODE == "SIMULATION":
         raise NotImplementedError
         # generate linear trajectory (each joint)/PDFF traj
@@ -94,5 +96,6 @@ if __name__ == "__main__":
         # simulate that
         # get new q stream
         # at each loop, we get new goal pos and plot it
+
     else:
         raise ValueError("Invalid mode: {}".format(MODE))
