@@ -4,8 +4,10 @@ from numpy import linalg as LA
 import matplotlib.animation as animation
 from collections import deque
 import time
+import os
+from roboticstoolbox.backends.swift import *
 
-from robot_arm import RobotArm2D, RobotArm3D, RobotArm
+from robot_arm import RobotArm2D, Braccio3D, RobotArm
 from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
@@ -53,7 +55,6 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     # Could use np.trapez but it gave me some weird error
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
     # https://docs.scipy.org/doc/scipy/reference/tutorial/integrate.html
-
     return time_steps, q, qdot, qdotdot
 
 def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
@@ -290,7 +291,7 @@ def gen_theta(
     dt          = 1e-2  if args.get('dt')           is None else args.get('dt')
     T           = 1     if args.get('T')            is None else args.get('T')
     h           = 10    if args.get('h')            is None else args.get('h')
-    B           = 10    if args.get('B')            is None else args.get('B')
+    B           = 5     if args.get('B')            is None else args.get('B')
     K           = 20    if args.get('K')            is None else args.get('K')
 
     N, _, _ = robot_arm.get_arm_params()
@@ -325,6 +326,8 @@ def gen_theta(
         init_condit
         )
     # print(Theta)
+    # plt.plot(range(iter_count+1), J_hist)
+    # plt.show()
     return Theta, iter_count, J_hist, task_info
 
     """
@@ -346,9 +349,29 @@ def training_data_gen(robot_arm):
 
     # a function that generates a point within the robot_arm_length circle radius
     assert(isinstance(robot_arm, RobotArm))
-    x_target = np.array([-0.3, 0.3])
-    init_condit = [np.array([np.pi/8, np.pi/4, np.pi/5]), np.array([0, 0, 0])]
+    x_target = np.array([0.14380348, 0.3495103, 0.11569066])
+    init_condit = [np.array([np.pi/2, np.pi/2, np.pi/2, np.pi/2]), np.array([0, 0, 0, 0])]
 
-    Theta, _ = gen_theta(x_target, init_condit, robot_arm)
+    Theta, _, _, task_info = gen_theta(x_target, init_condit, robot_arm)
 
-    return Theta
+    return Theta, task_info
+    
+
+if __name__ == "__main__":
+    braccio_robot = Braccio3D()
+    Theta, task_info = training_data_gen(braccio_robot)
+    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
+                           for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+    init_condit = [np.array([np.pi/2, np.pi/2, np.pi/2, np.pi/2]), np.array([0, 0, 0, 0])]
+    _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
+
+    backend = Swift()   
+
+    backend.launch()                    # activate it
+    backend.add(braccio_robot)          # add robot to the 3D scene
+
+    for qk in gen_q:                    # for each joint configuration on trajectory
+        braccio_robot.q = qk            # update the robot state
+        backend.step(dt = 1)            # update visualization
+        time.sleep(0.5)
+    backend.hold()

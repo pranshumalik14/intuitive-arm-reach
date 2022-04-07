@@ -10,7 +10,7 @@ env = Swift()
 
 print(robot)
 
-q = [90, 90, 90, 90]
+q = [65, 45, 38, 87]
 print(robot.fkine(np.deg2rad(q)).t)
 
 # Tend = SE3([-0.017, 0,  0.48])
