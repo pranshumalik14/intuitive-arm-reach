@@ -23,11 +23,11 @@ class Braccio(ERobot):
 
         # zero angles, L shaped pose
         self.addconfiguration("qz", np.deg2rad(
-            [90, 145, 0, 0, 90]))
+            [90, 145, 0, 0]))
 
         # ready pose, arm up
         self.addconfiguration("qr", np.deg2rad(
-            [0, 90, 90, 90, 90]))
+            [0, 90, 90, 90]))
 
     @staticmethod
     def load_my_path():

@@ -54,19 +54,19 @@ if __name__ == "__main__":
                     continue
 
                 # get current joint config
-                curr_q = np.array(braccio_driver.read())
-                print(curr_q)
+                curr_q = np.array(braccio_driver.read()['joint_angles'])
+                print("[MAIN] Current Joint Configuration: {}".format(curr_q))
 
                 # send problem to reach solver and make robot go to goal pos
                 if SOLVER == "IK":
-                    braccio_driver.set_joint_angles(
-                        np.rad2deg(
-                            braccio.ikine_LM(
-                                SE3(goal_pos),
-                                mask=[1, 1, 1, 1, 0, 0]
-                            ).q
-                        ).astype(int)
-                    )
+                    q_sol = np.rad2deg(
+                        braccio.ikine_min(
+                            SE3(goal_pos),
+                            qlim=True
+                        ).q
+                    ).astype(int)
+                    q_sol = np.append(q_sol, curr_q[-2:])
+                    braccio_driver.set_joint_angles(q_sol)
                 elif SOLVER == "RTA":
                     raise NotImplementedError  # todo
                 elif SOLVER == "RTM":
@@ -82,9 +82,17 @@ if __name__ == "__main__":
                 vis_msg = main_driverproc_pipe.recv()
                 state = "vision_terminated"
 
+            time.sleep(0.5)
+            # todo: make robot 4dof.
+
         vision_worker.join()
         vision_worker.close()
     elif MODE == "SIMULATION":
         raise NotImplementedError
+        # generate linear trajectory (each joint)/PDFF traj
+        # q stream
+        # simulate that
+        # get new q stream
+        # at each loop, we get new goal pos and plot it
     else:
         raise ValueError("Invalid mode: {}".format(MODE))

@@ -8,11 +8,14 @@ from numpy import pi
 robot = Braccio()
 env = Swift()
 
-q = [90, 145, 0, 0, 90]
+print(robot)
+
+q = [90, 90, 90, 90]
 print(robot.fkine(np.deg2rad(q)).t)
 
-# Tend = SE3([0.2,  0.4,  0.3])
-# q = robot.ikine_LM(Tend, mask=[1, 1, 1, 0, 0, 0])
+# Tend = SE3([-0.017, 0,  0.48])
+# q = robot.ikine_LM(Tend, mask=[1, 1, 1, 0, 0, 0]).q
+# q = robot.ikine_min(Tend, qlim=True).q
 robot.q = np.deg2rad(q)
 robot.plot(robot.q)
 
