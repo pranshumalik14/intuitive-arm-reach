@@ -2,8 +2,8 @@
 #include <Servo.h>
 #include <ArduinoJson.h>
 
-#define OFFSET_M1 185
-#define OFFSET_M2 10
+#define OFFSET_M1 182
+#define OFFSET_M2 15
 #define OFFSET_M3 -4
 #define OFFSET_M4 5
 #define OFFSET_M5 -10

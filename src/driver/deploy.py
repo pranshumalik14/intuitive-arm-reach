@@ -4,9 +4,9 @@ import time
 
 
 q1_stream = np.arange(0, 92, 2)
-q2_stream = np.array([145]*len(q1_stream))
-q3_stream = np.array([0]*len(q1_stream))
-q4_stream = np.array([0]*len(q1_stream))
+q2_stream = np.array([90]*len(q1_stream))
+q3_stream = np.array([90]*len(q1_stream))
+q4_stream = np.array([90]*len(q1_stream))
 q5_stream = np.array([90]*len(q1_stream))
 q6_stream = np.array([10]*len(q1_stream))
 
@@ -18,7 +18,8 @@ braccio_driver = BraccioRobotDriver(
     port="5"
 )
 
-braccio_driver.calibrate()
+braccio_driver.connect("5")
+# braccio_driver.calibrate()
 
 for angles in q_stream:
     braccio_driver.set_joint_angles(angles)

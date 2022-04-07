@@ -101,6 +101,8 @@ class Braccio(ERobot):
         def qlim_lower_constraint(q, *args):
             return q - min_q
 
+        # todo: get closed form sol as initial guess
+
         # the optimal [shoulder, elbow, wrist] angles
         qsew = opt.fmin_slsqp(
             func=distance_to_q0,
@@ -110,7 +112,7 @@ class Braccio(ERobot):
             ieqcons=[qlim_upper_constraint,
                      qlim_lower_constraint],
             args=(rz,),
-            iprint=0
+            iprint=0  # 1 to print
         )
 
         return np.append(qb, qsew)
