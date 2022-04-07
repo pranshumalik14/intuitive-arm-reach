@@ -35,6 +35,31 @@ class Braccio(ERobot):
         # print(__file__)
         os.chdir(os.path.dirname(__file__))
 
+    def __closed_form_solution__(self, xyz, curr_q, L):
+        # Arctan2(y, x)
+        a1 = L[0]
+        a2 = L[1]
+        a3 = L[2]
+
+        # wrist is xyz
+        x_wrist = xyz[0]
+        y_wrist = xyz[1]
+        z_wrist = xyz[2]
+        l = np.sqrt(x_wrist**2 + y_wrist**2)
+
+        # Theta 2
+        stuff = (a1**2 + a2**2 -l**2)/(2*a1*a2)
+        theta2 = np.arctan2( np.sqrt(1-stuff**2) , stuff)
+
+        # Theta 1
+        in_angle  = np.arctan2(a2*np.sin(theta2), a1 + a2*np.cos(theta2))
+        out_angle = np.arctan2(y_wrist, x_wrist)
+        theta1 = in_angle + out_angle
+
+        # TODO: This is wrong must fix
+        theta3 = np.pi - (theta1 + theta2)
+        return theta1, theta2, theta3
+        
     def inverse_kinematics(self, xyz, curr_q):  # curr_q is 6D
         """
         Inverse kinematics for the Braccio Arm
