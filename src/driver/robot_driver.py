@@ -35,7 +35,7 @@ class BraccioRobotDriver:
         else:
             # TODO: check if isinstance() of whatever struct returns
             self.cnx.write(insts)
-        time.sleep(self.loop_rate)
+        time.sleep(self.wait_factor*self.loop_rate)
 
     def connect(self, port, os='Win'):
         if os == 'Win':
