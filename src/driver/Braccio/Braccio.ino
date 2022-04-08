@@ -55,7 +55,7 @@ void setup()
   // Wrist vertical (M4): 180 degrees
   // Wrist rotation (M5): 90 degrees
   // gripper (M6): 10 degrees
-  Serial.begin(9600);
+  Serial.begin(19200);
   Braccio.begin();
 }
 

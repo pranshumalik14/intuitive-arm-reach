@@ -1,12 +1,22 @@
-from roboticstoolbox.backends.swift import *
+from roboticstoolbox.backends.swift import Swift
 from Braccio import Braccio
 from spatialmath import SE3
 import roboticstoolbox as rtb
 import numpy as np
 import time
+import spatialgeometry as sg
 
 robot = Braccio()
 env = Swift()
+env.launch()
+
+c = sg.Cuboid(
+    scale=[0.05, 0.05, 0.05],
+    base=SE3(0.2, 0.5, 0.5),
+    color="blue"
+)
+
+cube_id = env.add(c)
 
 q = [0, 60, 27, 90]
 print(
@@ -36,7 +46,12 @@ print(
 # q = robot.ikine_LM(Tend, mask=[1, 1, 1, 0, 0, 0]).q
 # q = robot.ikine_min(Tend, qlim=True).q
 # robot.q = np.deg2rad(q)
-robot.plot(qik)
+env.add(robot)
+robot.q = qik
+env.step()
+time.sleep(5)
+env.remove(c)
+env.step()
 
 # qt = rtb.tools.trajectory.jtraj(np.array(
 #     [0, 0.3, pi/2, pi/2, pi/2]), np.array([pi/2, pi/2, pi, pi/2, pi/2]), 1000)

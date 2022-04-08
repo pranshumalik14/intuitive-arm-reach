@@ -47,7 +47,7 @@ class BraccioRobotDriver:
         else:
             raise Exception("Unsupported OS")
 
-        self.cnx = serial.Serial(port=port, baudrate=9600, timeout=1)
+        self.cnx = serial.Serial(port=port, baudrate=19200, timeout=1)
 
     def disconnect(self):
         self.cnx.close()
