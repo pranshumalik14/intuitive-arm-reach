@@ -5,12 +5,14 @@ import matplotlib.animation as animation
 from collections import deque
 import time
 import os
+import pandas as pd
 from roboticstoolbox.backends.swift import *
 
 from robot_arm import RobotArm2D, Braccio3D, RobotArm
 from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
+from data_prep import clean_data
 
 from spatialmath import SE3
 import spatialgeometry as sg
@@ -491,6 +493,12 @@ def training_data_gen(robot_arm):
 if __name__ == "__main__":
     braccio_robot = Braccio3D()
     Theta, task_info = training_data_gen(braccio_robot)
+
+    # TODO: @pranshu you can put the path to the data you need here
+    data_csv_path = ""
+    pibb_data_df = pd.read_csv(data_csv_path)
+    concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
+
     Theta = np.array(
         [
             [ 8.26676483, -5.30155064,  6.84200035,  3.97223424],
