@@ -25,7 +25,11 @@ if __name__ == "__main__":
         braccio_driver.calibrate()
 
         # set reach solver
-        SOLVER = "IK"  # "RTA", or "RTM" (reach task algo/model)
+        SOLVER = "TEST"  # "IK", "RTA", or "RTM" (reach task algo/model)
+
+        # define goal region
+        goal_min, goal_max = np.array(
+            [[-0.37, 0.37], [0, 0.37], [0.05, 0.5]]).T
 
         # create a pipe to communicate with the vision process
         main_driverproc_pipe, vision_subproc_pipe = Pipe(duplex=True)
@@ -58,9 +62,9 @@ if __name__ == "__main__":
                 goal_pos = main_driverproc_pipe.recv()
                 print("[MAIN] Current Goal: {}".format(goal_pos))
 
-                # todo: make sure goal is within semi-sphere
-                # make sure not invalid (i.e. [-1, -1, -1])
-                if np.array_equal(goal_pos, np.array([-1, -1, -1])):
+                # make sure not invalid (i.e. [-1, -1, -1]) or out of bounds
+                if np.array_equal(goal_pos, np.array([-1, -1, -1])) or \
+                   ((goal_pos < goal_min) | (goal_pos > goal_max)).any():
                     print("[MAIN] Goal Invalid (Skipped)")
                     check_procexit_wait()
                     continue
@@ -82,7 +86,8 @@ if __name__ == "__main__":
                 elif SOLVER == "RTM":
                     raise NotImplementedError  # todo
                 else:
-                    raise ValueError("Invalid Solver")
+                    check_procexit_wait()
+                    # raise ValueError("Invalid Solver")
 
                 check_procexit_wait()
 
