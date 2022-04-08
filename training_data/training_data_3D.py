@@ -33,26 +33,28 @@ def sphe2cart(rho, phi, theta):
     Convert spheical coordinates into cartesian
     https://keisan.casio.com/exec/system/1359534351
     """
-    x = rho * np.cos(theta) * np.sin(phi)
-    y = rho * np.sin(theta) * np.sin(phi)
-    z = rho * np.cos(phi)
+    x = rho * np.cos(phi) * np.cos(theta)
+    y = rho * np.cos(phi) * np.sin(theta)
+    z = rho * np.sin(phi)
     return (x, y, z)
 
-def generate_target_pts_on_arc(rho, d_theta, d_phi):
+def generate_target_pts_on_arc(rho, d_theta, d_phi, ds_phi, ds_theta):
     X_dum, Y_dum, Z_dum = [], [], []
-    ds_phi = rho*d_phi
-    for s_phi in numpy_linspace(rho*np.deg2rad(0), rho*np.deg2rad(70), ds_phi):
+    # ds_phi = rho*d_phi
+
+    # ds_theta = d_theta * rho
+
+    for s_phi in numpy_linspace(rho*np.deg2rad(20), rho*np.deg2rad(90), ds_phi):
         phi = s_phi/rho
         R = rho*np.cos(phi)
-
-        ds_theta = R*d_theta
 
         Xs, Ys, Zs = [], [], []
         for s_theta in numpy_linspace(0, R*np.deg2rad(180), ds_theta):
             theta = s_theta/R
-            # print("Rho is : {} and Phi is: {}".format(rho, phi))
+
+            # print("Rho is : {} and Phi is: {}, Theta {}".format(rho, phi, theta))
             x, y, z = sphe2cart(rho, phi, theta)
-            # print("X coord is : {} and Y coord is: {}".format(x, y))
+            # print("X coord is : {} and Y coord is: {}, Z is {}".format(x, y, z))
             Xs.append(x)
             Ys.append(y)
             Zs.append(z)
@@ -74,8 +76,10 @@ def generate_target_pts_3D(min_rho, max_rho, d_rho, d_theta, d_phi):
 
     X_circles, Y_circles, Z_circles = [], [], []
 
+    ds = max_rho * d_theta
+
     for rho in rhos:
-        x, y, z = generate_target_pts_on_arc(rho, d_theta, d_phi)
+        x, y, z = generate_target_pts_on_arc(rho, d_theta, d_phi, ds, ds)
         X_circles.append(x)
         Y_circles.append(y)
         Z_circles.append(z)
@@ -89,6 +93,7 @@ def visualize_circles(Xs, Ys, Zs):
     for i in range(len(Xs)):
         for j in range(len(Xs[i])):
             ax.scatter(Xs[i][j], Ys[i][j], Zs[i][j])
+        # break
     plt.savefig('training_data_scatter3D.png')
     plt.show()
 
@@ -96,13 +101,15 @@ def find_closest_target_pt(x_ee, y_ee, z_ee, X_target, Y_target, Z_target):
     def euc_dist(x1, y1, z1, x2, y2, z2):
         return np.sqrt((y2-y1)**2 + (x2-x1)**2 + (z2-z1)**2)
     
+    print(X_target)
     n_target_pts = len(X_target)
 
     closest_idx = 0
     min_dist = np.Inf
 
     for i in range(n_target_pts):
-        dist = euc_dist(X_target[i], Y_target[i], x_ee, y_ee)
+        dist = euc_dist(X_target[i], Y_target[i], Z_target[i], x_ee, y_ee, z_ee)
+        print(dist)
 
         if dist < min_dist:
             min_dist = dist
@@ -132,14 +139,15 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
             Y_target = Y_cir[arc_idx][circle_idx]
             Z_target = Z_cir[arc_idx][circle_idx]
 
+
             n_pts_on_circle = len(X_target)
             
             index = 0
             final_training_data = np.zeros(n_pts_on_circle * len(columns), dtype=object).reshape((n_pts_on_circle, len(columns)))
 
             closest_idx = find_closest_target_pt(
-                X_target, Y_target, Z_target, 
-                x_ee, y_ee, z_ee
+                x_ee, y_ee, z_ee,
+                X_target, Y_target, Z_target
             )
 
             # TODO: What changes here is that it is not necessary to n_pts_on_circle//2 need to be taken 
@@ -221,21 +229,24 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
 
 def generate_training_data3D(robot_arm, N = 10):
     # TODO: Get robot min length and max length
-    X_cir, Y_cir, Z_cir = generate_target_pts_3D(2, 5, 0.05, np.pi/64, np.pi/64)
+    X_cir, Y_cir, Z_cir = generate_target_pts_3D(0.16, 0.49, 0.035, np.pi/24, np.pi/24)
     assert(len(X_cir) == len(Y_cir) == len(Z_cir))
     visualize_circles(X_cir, Y_cir, Z_cir)
 
     # Need to pick N number of random target points, on which inverse kine would be applied and that would be chosen as a pseudo random config
     # Need to generate N random indices between 0 and len(X_cir)
-    rand_idxs = random.sample(range(0, len(X_cir)), N)
-    init_starting_pts = [(X_cir[idx], Y_cir[idx], Z_cir[idx]) for idx in rand_idxs]
-    print(init_starting_pts)
-    # TODO: how to get curq here?
-    cur_q = [0, 90, 90, 90, 0, 0]
-    init_joint_angles = [robot_arm.inverse_kinematics(point, cur_q) for point in init_starting_pts]
+    # rand_idxs = random.sample(range(0, len(X_cir)), N)
+    # init_starting_pts = [(X_cir[idx], Y_cir[idx], Z_cir[idx]) for idx in rand_idxs]
+    # print(init_starting_pts)
+    # # TODO: how to get curq here?
+    # cur_q = [0, 90, 90, 90, 0, 0]
+    # init_joint_angles = [robot_arm.inverse_kinematics(point, cur_q) for point in init_starting_pts]
 
-    num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i], robot_arm) for i in range(N))
+    # num_cores = multiprocessing.cpu_count()
+    # Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i], robot_arm) for i in range(N))
+
+    cur_q = np.deg2rad([0, 30, 90, 90])
+    explore_random_joint_angles(X_cir, Y_cir, Z_cir, cur_q, robot_arm)
 
 if __name__ == "__main__":
     robot_arm = rb.Braccio3D()

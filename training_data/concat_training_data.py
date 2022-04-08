@@ -14,9 +14,9 @@ def concat_training_data(folder_path):
             df = pd.concat([df, pd.read_csv(folder_path + file_name)], ignore_index = True)
     
     df = df[df["init_joint_angles"] != '0']
-    df.to_csv(folder_path+'main_data.csv', index = False)
+    df.to_csv(folder_path+'20220408_1641main_data.csv', index = False)
 
 
 if __name__ == "__main__":
-    folder_path = "20220406_0812/"
+    folder_path = "20220408_1641/"
     concat_training_data(folder_path)

@@ -12,6 +12,9 @@ from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
 
+from spatialmath import SE3
+import spatialgeometry as sg
+
 
 def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     """
@@ -490,11 +493,11 @@ if __name__ == "__main__":
     Theta, task_info = training_data_gen(braccio_robot)
     Theta = np.array(
         [
-            [  0.31540199,   2.33703583,  -1.37486201, -10.80953334],
-            [ -0.69303522,  -1.51068761,  -0.62932829,  -0.1546271 ],
-            [ -0.45781229,   1.59533281,  -1.93878948,   1.13470968],
-            [  0.16634333,   0.83081147,  -1.73352723,  -1.71588949],
-            [  0.13545236,   1.86220146,   0.51463346,   0.45199333]
+            [ 8.26676483, -5.30155064,  6.84200035,  3.97223424],
+            [ 3.21325747,  0.94689616, -0.40225434,  1.46663381], 
+            [ 5.24084877,  0.46927471, -1.60005178,  1.37439546],
+            [ 1.26010728,  0.32400262,  1.23270931,  0.68556777],
+            [ 2.26210504, -2.35412082,  0.91483854, -0.34907162]
         ]
     )
     gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
@@ -502,13 +505,24 @@ if __name__ == "__main__":
     init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
     _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
 
-    backend = Swift()   
+    print(gen_q[-1, :])
 
+    backend = Swift()   
     backend.launch()                    # activate it
+
+    c = sg.Cuboid(
+        scale=[0.05, 0.05, 0.05],
+        base=SE3(-0.1315935483132926,	0.0633721128665039,	0.2746948066672217),
+        color="blue"
+    )
+
+    cube_id = backend.add(c)
+
+    
     backend.add(braccio_robot)          # add robot to the 3D scene
 
     for qk in gen_q:                    # for each joint configuration on trajectory
         braccio_robot.q = qk            # update the robot state
         backend.step(dt = 1)            # update visualization
-        time.sleep(0.5)
+        time.sleep(0.2)
     backend.hold()
