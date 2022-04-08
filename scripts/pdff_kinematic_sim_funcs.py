@@ -56,6 +56,134 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
 
     return time_steps, q, qdot, qdotdot
 
+def draw_sim_start(robot_arm, init_condit):
+    # Forward kinematics
+    [link_positions_x, link_positions_y] = robot_arm.angles_to_link_positions(init_condit)
+
+    # Robot params
+    n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
+
+    # Figure set up
+    fig = plt.figure()
+    padding_factor = 1.5
+    axes_lim = arm_length*padding_factor
+
+    ax = fig.add_subplot(autoscale_on=False, xlim=(-axes_lim,
+                                                   axes_lim), ylim=(-axes_lim, axes_lim))
+    ax.set_aspect('equal')
+    ax.grid()
+
+    # Adding the base of the robot arm
+    points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
+    line = plt.Polygon(points, closed=True, fill=True, color='red')
+    plt.gca().add_patch(line)
+
+    line, = ax.plot([], [], 'o-', lw=2)
+    line.set_data(link_positions_x[0,:], link_positions_y[0,:])
+
+    return fig, ax
+
+
+def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train):
+    # Get q and qdot
+    time_steps_1, q_1, qdot_1, qdotdot_1 = get_traj(
+        qdotdots[0], 
+        robot_arm, 
+        dt,
+        init_condit = init_condit
+    )
+    time_steps_2, q_2, qdot_2, qdotdot_2 = get_traj(
+        qdotdots[1], 
+        robot_arm, 
+        dt,
+        init_condit = init_condit
+    )
+    n_time_steps = len(time_steps_1)
+
+    # Forward kinematics
+    [link_positions_x1, link_positions_y1] = robot_arm.angles_to_link_positions(q_1)
+    [link_positions_x2, link_positions_y2] = robot_arm.angles_to_link_positions(q_2)
+    # Robot params
+    n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
+
+    # Figure set up
+    fig, axs = plt.subplots(1, 2)
+    padding_factor = 1.5
+    axes_lim = arm_length*padding_factor
+    
+    for ax in axs:
+        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal')
+        ax.grid()
+
+    # tracking the history of movements
+    tracking_history_points = 1000
+    history_x1, history_y1 = deque(maxlen=tracking_history_points), deque(
+        maxlen=tracking_history_points)
+    history_x2, history_y2 = deque(maxlen=tracking_history_points), deque(
+        maxlen=tracking_history_points)
+
+    # Adding the base of the robot arm
+    points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
+    line1 = plt.Polygon(points, closed=True, fill=True, color='red')
+    line2 = plt.Polygon(points, closed=True, fill=True, color='red')
+    axs[0].add_patch(line1)
+    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours")
+    axs[1].add_patch(line2)
+    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours")
+
+    # Dynamic lines (theese are the lines/vals that will update during the simulation)
+    line1, = axs[0].plot([], [], 'o-', lw=2)
+    line2, = axs[1].plot([], [], 'o-', lw=2)
+    line = [line1, line2]
+
+    # animation for each frame
+    def animate(i):
+        # all x axis values are in the even-numbered columns
+        thisx1 = link_positions_x1[i, :] # get the current row of joint angles (x vals)
+        thisx2 = link_positions_x2[i, :] # get the current row of joint angles (x vals)
+        # all y axis value are in the odd-numbered columns
+        thisy1 = link_positions_y1[i, :] # get the current row of joint angles (y vals)
+        thisy2 = link_positions_y2[i, :] # get the current row of joint angles (y vals)
+
+        if i == 0:
+            history_x1.clear()
+            history_y1.clear()
+            history_x2.clear()
+            history_y2.clear()
+
+        # History only tracks the end effector
+        history_x1.appendleft(thisx1[-1])
+        history_y1.appendleft(thisy1[-1])
+        history_x2.appendleft(thisx2[-1])
+        history_y2.appendleft(thisy2[-1])
+
+        # Set current state of (x,y) for each joint
+        line[0].set_data(thisx1, thisy1)
+        # trace[0].set_data(history_x1, history_y1)
+        line[1].set_data(thisx2, thisy2)
+        # trace[1].set_data(history_x2, history_y2)
+
+        return line #, trace, time_text
+
+    ani = animation.FuncAnimation(
+        fig, animate, n_time_steps, interval=30*(dt* n_time_steps), blit=True
+    )
+
+    # Goal position
+    axs[0].plot(x_goal[0], x_goal[1], '-o')  # Goal position
+    axs[1].plot(x_goal[0], x_goal[1], '-o')  # Goal position
+    axs[0].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+    axs[1].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+
+    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
+    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=14)
+    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=14)
+    axs[0].legend(fontsize=14)
+    axs[1].legend(fontsize=14)
+    plt.get_current_fig_manager().full_screen_toggle()
+
+    return ani
+
 def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     """
 
@@ -155,7 +283,7 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
         return line, trace, time_text
 
     ani = animation.FuncAnimation(
-        fig, animate, n_time_steps, interval=dt * n_time_steps, blit=True
+        fig, animate, n_time_steps, interval=10*(dt* n_time_steps), blit=True
     )
 
     # Goal position
