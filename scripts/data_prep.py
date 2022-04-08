@@ -4,7 +4,7 @@ import platform
 from robot_arm import RobotArm, RobotArm2D, RobotArm3D
 from task_info import TaskInfo, numpy_linspace
 
-HOLDOUT = "SKIP"
+HOLDOUT = None
 
 def load_data(data_csv, task_info_csv):
     pibb_data_df = pd.read_csv(data_csv)
@@ -143,9 +143,13 @@ def holdout_data(pibb_data_df, strat="SKIP"):
     raise Exception("SKIP strat only currently accepted")
 
 
-def clean_data(pibb_data_df, task_info):
-    pibb_data_df = pibb_data_df.where(pibb_data_df["init_joint_angles"] != "0").dropna(how="all")
-    pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target"], ignore_index=True)
+def clean_data(pibb_data_df, task_info, planar=True):
+    # pibb_data_df = pibb_data_df.where(pibb_data_df["init_joint_angles"] != "0").dropna(how="all")
+
+    # if not planar:
+    #     pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target", "z_target"], ignore_index=True)
+    # else:
+    #     pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target"], ignore_index=True)
 
     original_df = None
     holdout = None
@@ -163,6 +167,12 @@ def clean_data(pibb_data_df, task_info):
     y_target = pibb_data_df['y_target']
     y_target_np = y_target.to_numpy()
     y_target = np.reshape(y_target_np, (y_target_np.shape[0], 1))
+
+    if not planar:
+        # rehsape z target
+        z_target = pibb_data_df['z_target']
+        z_target_np = z_target.to_numpy()
+        z_target = np.reshape(z_target_np, (z_target_np.shape[0], 1))
 
     # reshape joint angles
     joint_angles = pibb_data_df['init_joint_angles']
@@ -187,12 +197,20 @@ def clean_data(pibb_data_df, task_info):
     
     theta = temp_theta
 
-    print("Input sizes are: \n", "joint angles: ", str(joint_angles.shape), "\nx_target: ",
-    str(x_target.shape), "\ny_target: ", str(y_target.shape))
-    print("Output size is:\n theta: ", str(theta.shape))
+    if not planar:
+        print("Input sizes are: \n", "joint angles: ", str(joint_angles.shape), "\nx_target: ",
+        str(x_target.shape), "\ny_target: ", str(y_target.shape), "\nz_target: ", str(z_target.shape))
+        print("Output size is:\n theta: ", str(theta.shape))
+    else:
+        print("Input sizes are: \n", "joint angles: ", str(joint_angles.shape), "\nx_target: ",
+        str(x_target.shape), "\ny_target: ", str(y_target.shape))
+        print("Output size is:\n theta: ", str(theta.shape))
 
     # Concatenate all input features into a single matrix
-    concat_input = np.concatenate([joint_angles, x_target, y_target], axis=1)
+    if not planar:
+        concat_input = np.concatenate([joint_angles, x_target, y_target, z_target], axis=1)
+    else:
+        concat_input = np.concatenate([joint_angles, x_target, y_target], axis=1)
     flatten_theta = np.zeros(shape=(theta.shape[0], theta.shape[1]*theta.shape[2]))
     for i in range(0, len(flatten_theta)):
         flatten_theta[i] = theta[i].flatten()
