@@ -127,7 +127,7 @@ concat_input = np.load(concat_input_file)
 flatten_theta = np.load(flatten_theta_file)
 
 print("Training Interpolators ...")
-SCALAR = "MABS"
+SCALAR = None
 nn_interp = IDW(concat_input, flatten_theta, K=1, scalar=SCALAR)
 idw_interp_3 = IDW(concat_input, flatten_theta, K=3, scalar=SCALAR)
 idw_interp_5 = IDW(concat_input, flatten_theta, K=5, scalar=SCALAR)
