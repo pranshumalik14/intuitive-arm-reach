@@ -488,9 +488,18 @@ def training_data_gen(robot_arm):
 if __name__ == "__main__":
     braccio_robot = Braccio3D()
     Theta, task_info = training_data_gen(braccio_robot)
+    Theta = np.array(
+        [
+            [  0.31540199,   2.33703583,  -1.37486201, -10.80953334],
+            [ -0.69303522,  -1.51068761,  -0.62932829,  -0.1546271 ],
+            [ -0.45781229,   1.59533281,  -1.93878948,   1.13470968],
+            [  0.16634333,   0.83081147,  -1.73352723,  -1.71588949],
+            [  0.13545236,   1.86220146,   0.51463346,   0.45199333]
+        ]
+    )
     gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
                            for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
-    init_condit = [np.array([np.pi/2, np.pi/2, np.pi/2, np.pi/2]), np.array([0, 0, 0, 0])]
+    init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
     _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
 
     backend = Swift()   
