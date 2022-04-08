@@ -73,7 +73,7 @@ if __name__ == "__main__":
                 # send problem to reach solver and make robot go to goal pos
                 if SOLVER == "IK":
                     q_sol = np.rad2deg(
-                        braccio.inverse_kinematics(goal_pos, rad_q)
+                        braccio.inverse_kinematics(goal_pos)  # , curr_q=rad_q)
                     ).astype(int)
                     q_sol = np.append(q_sol, deg_q[-2:])
                     braccio_driver.set_joint_angles(q_sol)

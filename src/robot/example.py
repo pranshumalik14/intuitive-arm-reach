@@ -8,18 +8,29 @@ import time
 robot = Braccio()
 env = Swift()
 
-print(robot)
-
-q = [65, 45, 38, 87]
-# q = [90, 145, 0, 90]
-print(robot.fkine(np.deg2rad(q)).t)
+q = [0, 60, 27, 90]
+print(
+    "Current error {}".format(
+        np.linalg.norm(
+            robot.fkine(np.deg2rad(q)).t -
+            np.array([0.18207023, 0.03188366, 0.33000004])
+        )
+    )
+)
 
 ik_start_time = time.time()
+qstart = np.deg2rad(q+[90, 0])
 qik = robot.inverse_kinematics(
-    # fails to reach if start from 90,90,90,90,10...
-    [0.26217005, 0.18896779, 0.051], np.deg2rad([0, 60, 27, 90, 90, 10])
+    [0.18207023, 0.03188366, 0.33000004], curr_q=qstart)
+print(
+    "IK took {}s with error {}".format(
+        time.time() - ik_start_time,
+        np.linalg.norm(
+            robot.fkine(qik).t -
+            np.array([0.26217005, 0.18896779, 0.051])
+        )
+    )
 )
-print("IK took {}s".format(time.time() - ik_start_time))
 
 # Tend = SE3([-0.017, 0,  0.48])
 # q = robot.ikine_LM(Tend, mask=[1, 1, 1, 0, 0, 0]).q

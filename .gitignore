@@ -1,6 +1,8 @@
 # macOS
 .DS_Store
 
+.vscode/*
+
 # demo gifs (unless manually added)
 *.gif
 
