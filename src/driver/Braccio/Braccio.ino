@@ -2,8 +2,8 @@
 #include <Servo.h>
 #include <ArduinoJson.h>
 
-#define OFFSET_M1 185
-#define OFFSET_M2 10
+#define OFFSET_M1 182
+#define OFFSET_M2 15
 #define OFFSET_M3 -4
 #define OFFSET_M4 5
 #define OFFSET_M5 -10
@@ -55,13 +55,13 @@ void setup()
   // Wrist vertical (M4): 180 degrees
   // Wrist rotation (M5): 90 degrees
   // gripper (M6): 10 degrees
-  Serial.begin(9600);
+  Serial.begin(19200);
   Braccio.begin();
 }
 
 int state = 0; // 0 -> set angles, 1 -> read angles
 int q1 = 0;
-int q2 = 15;
+int q2 = 30;
 int q3 = 90;
 int q4 = 90;
 int q5 = 90;
@@ -134,7 +134,7 @@ void loop()
     else if (state == ST_CAMERA_CALIB)
     {
       q1 = 0;
-      q2 = 15;
+      q2 = 30;
       q3 = 90;
       q4 = 90;
       q5 = 90;

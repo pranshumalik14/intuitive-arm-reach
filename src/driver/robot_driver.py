@@ -26,6 +26,7 @@ class BraccioRobotDriver:
         self.curr_joint_angles = None
         self.target_location = None
         self.loop_rate = args.get("loop_rate")
+        self.wait_factor = 2
 
     def write(self, insts):
         if isinstance(insts, list):
@@ -34,7 +35,7 @@ class BraccioRobotDriver:
         else:
             # TODO: check if isinstance() of whatever struct returns
             self.cnx.write(insts)
-        time.sleep(self.loop_rate)
+        time.sleep(self.wait_factor*self.loop_rate)
 
     def connect(self, port, os='Win'):
         if os == 'Win':
@@ -46,7 +47,7 @@ class BraccioRobotDriver:
         else:
             raise Exception("Unsupported OS")
 
-        self.cnx = serial.Serial(port=port, baudrate=9600, timeout=1)
+        self.cnx = serial.Serial(port=port, baudrate=19200, timeout=1)
 
     def disconnect(self):
         self.cnx.close()
@@ -94,7 +95,9 @@ class BraccioRobotDriver:
     def read(self):
         self.cnx.reset_input_buffer()
         self.write(struct.pack('>B', ST_READ_ARDUINO))
-        to_return = json.loads(self.cnx.read(1024).decode('UTF-8'))
+        time.sleep(self.wait_factor*self.loop_rate)
+        msg = self.cnx.read(1024).decode('UTF-8')
+        to_return = json.loads(msg)
         return to_return
 
     def reset_joint_constraint_status(self):

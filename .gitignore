@@ -1,6 +1,8 @@
 # macOS
 .DS_Store
 
+.vscode/*
+
 # demo gifs (unless manually added)
 *.gif
 
@@ -8,6 +10,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+arm_reach/*
+robotics-toolbox-python/*
 
 # C extensions
 *.so

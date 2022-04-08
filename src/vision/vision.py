@@ -142,7 +142,6 @@ def blob_param(minArea=10, maxArea=10000):
 def load_presets(config, filename="src/vision/realsense_presets.json"):
     vis_presets = json.load(open(filename))
     pset_string = str(vis_presets).replace("'", '\"')
-
     device = config.get_device()
     advmod = rs.rs400_advanced_mode(device)
     advmod.load_json(pset_string)
@@ -307,7 +306,7 @@ def origin2vision_frame(vision2origin_pos):
 def origin2point_pos(vision2point_pos, vision2origin_pos):
     # invalid input
     if vision2point_pos == [-1, -1, -1]:
-        return [-1, -1, -1]
+        return np.array([-1, -1, -1])
     return (origin2vision_frame(vision2origin_pos) * SE3(vision2point_pos)).t
 
 
