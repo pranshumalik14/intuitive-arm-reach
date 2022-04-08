@@ -9,7 +9,7 @@ from sklearn import neighbors
 from robot_arm import RobotArm, RobotArm2D, RobotArm3D
 from task_info import TaskInfo, numpy_linspace
 import data_prep
-from interpolators import idw, get_interpolator
+from interpolators import IDW
 from PIBB_helper import qdotdot_gen
 from pdff_kinematic_sim_funcs import get_traj_and_simulate2d, get_traj, draw_sim_start, get_multi_traj_and_simulate2d
 import matplotlib; matplotlib.use("TkAgg")
@@ -34,7 +34,7 @@ def onclick(event, robot_arm, filter_condition):
     plt.legend(fontsize=14)
     plt.show(block=False) #redraw
     ax.set_title("Generating Trajectories to Target Point", fontsize=20)
-    plt.pause(6)
+    plt.pause(5)
     plt.close()
 
 
@@ -127,36 +127,39 @@ concat_input = np.load(concat_input_file)
 flatten_theta = np.load(flatten_theta_file)
 
 print("Training Interpolators ...")
-nn_interp = get_interpolator("IDW", concat_input, flatten_theta, K=1)
-idw_interp_3 = get_interpolator("IDW", concat_input, flatten_theta, K=3)
-idw_interp_5 = get_interpolator("IDW", concat_input, flatten_theta, K=5)
+SCALAR = "MABS"
+nn_interp = IDW(concat_input, flatten_theta, K=1, scalar=SCALAR)
+idw_interp_3 = IDW(concat_input, flatten_theta, K=3, scalar=SCALAR)
+idw_interp_5 = IDW(concat_input, flatten_theta, K=5, scalar=SCALAR)
 print("Interpolator Training Complete")
 
 # Plot training data
 init_conditions = np.unique(concat_input[:, 0:3], axis=0)
-for i in range(len(init_conditions)):
-    print(str(i) + ": " + str(init_conditions[i]))
-init_choice = int(input("Choose an initial condition: "))
 
-filter_condition = init_conditions[init_choice]
-filter = (concat_input[:,0] == filter_condition[0]) & (concat_input[:,1] == filter_condition[1]) & (concat_input[:,2] == filter_condition[2])
-filtered = concat_input[filter]
-c_xs = filtered[:, -2]
-c_ys = filtered[:, -1]
-XS = c_xs
-YS = c_ys
-filter_condition = np.reshape(filter_condition, (1, 3))
+while(True):
+    for i in range(len(init_conditions)):
+        print(str(i) + ": " + str(init_conditions[i]))
+    init_choice = int(input("Choose an initial condition: "))
+
+    filter_condition = init_conditions[init_choice]
+    filter = (concat_input[:,0] == filter_condition[0]) & (concat_input[:,1] == filter_condition[1]) & (concat_input[:,2] == filter_condition[2])
+    filtered = concat_input[filter]
+    c_xs = filtered[:, -2]
+    c_ys = filtered[:, -1]
+    XS = c_xs
+    YS = c_ys
+    filter_condition = np.reshape(filter_condition, (1, 3))
 
 
-fig, ax = draw_sim_start(robot_arm, filter_condition)
-plt.scatter(c_xs, c_ys, label="Training Points", c="m")
-fig.canvas.mpl_connect('button_press_event', lambda event: onclick(event, robot_arm, filter_condition))
+    fig, ax = draw_sim_start(robot_arm, filter_condition)
+    plt.scatter(c_xs, c_ys, label="Training Points", c="m")
+    fig.canvas.mpl_connect('button_press_event', lambda event: onclick(event, robot_arm, filter_condition))
 
-plt.get_current_fig_manager().full_screen_toggle()
-plt.legend(fontsize=14)
-ax.set_title("Choose a target point", fontsize=20)
-plt.show()
-# animate_traj_to_point(nn_interp, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
-# animate_traj_to_point(idw_interp_5, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
-interps = [nn_interp, idw_interp_5]
-animate_multi_traj_to_point(interps, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm, train=[XS, YS])
+    plt.get_current_fig_manager().full_screen_toggle()
+    plt.legend(fontsize=14)
+    ax.set_title("Choose a target point", fontsize=20)
+    plt.show()
+    # animate_traj_to_point(nn_interp, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
+    # animate_traj_to_point(idw_interp_5, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
+    interps = [nn_interp, idw_interp_5]
+    animate_multi_traj_to_point(interps, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm, train=[XS, YS])
