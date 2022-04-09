@@ -5,12 +5,17 @@ import matplotlib.animation as animation
 from collections import deque
 import time
 import os
+import pandas as pd
 from roboticstoolbox.backends.swift import *
 
 from robot_arm import RobotArm2D, Braccio3D, RobotArm
 from task_info import numpy_linspace, TaskInfo
 from cost_functions import cost_function
 from PIBB_helper import qdotdot_gen
+from data_prep import clean_data
+
+from spatialmath import SE3
+import spatialgeometry as sg
 
 
 def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
@@ -56,6 +61,134 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
     # https://docs.scipy.org/doc/scipy/reference/tutorial/integrate.html
     return time_steps, q, qdot, qdotdot
+
+def draw_sim_start(robot_arm, init_condit):
+    # Forward kinematics
+    [link_positions_x, link_positions_y] = robot_arm.angles_to_link_positions(init_condit)
+
+    # Robot params
+    n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
+
+    # Figure set up
+    fig = plt.figure()
+    padding_factor = 1.5
+    axes_lim = arm_length*padding_factor
+
+    ax = fig.add_subplot(autoscale_on=False, xlim=(-axes_lim,
+                                                   axes_lim), ylim=(-axes_lim, axes_lim))
+    ax.set_aspect('equal')
+    ax.grid()
+
+    # Adding the base of the robot arm
+    points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
+    line = plt.Polygon(points, closed=True, fill=True, color='red')
+    plt.gca().add_patch(line)
+
+    line, = ax.plot([], [], 'o-', lw=2)
+    line.set_data(link_positions_x[0,:], link_positions_y[0,:])
+
+    return fig, ax
+
+
+def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train):
+    # Get q and qdot
+    time_steps_1, q_1, qdot_1, qdotdot_1 = get_traj(
+        qdotdots[0], 
+        robot_arm, 
+        dt,
+        init_condit = init_condit
+    )
+    time_steps_2, q_2, qdot_2, qdotdot_2 = get_traj(
+        qdotdots[1], 
+        robot_arm, 
+        dt,
+        init_condit = init_condit
+    )
+    n_time_steps = len(time_steps_1)
+
+    # Forward kinematics
+    [link_positions_x1, link_positions_y1] = robot_arm.angles_to_link_positions(q_1)
+    [link_positions_x2, link_positions_y2] = robot_arm.angles_to_link_positions(q_2)
+    # Robot params
+    n_dims, arm_length, link_lengths = robot_arm.get_arm_params()
+
+    # Figure set up
+    fig, axs = plt.subplots(1, 2)
+    padding_factor = 1.5
+    axes_lim = arm_length*padding_factor
+    
+    for ax in axs:
+        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal')
+        ax.grid()
+
+    # tracking the history of movements
+    tracking_history_points = 1000
+    history_x1, history_y1 = deque(maxlen=tracking_history_points), deque(
+        maxlen=tracking_history_points)
+    history_x2, history_y2 = deque(maxlen=tracking_history_points), deque(
+        maxlen=tracking_history_points)
+
+    # Adding the base of the robot arm
+    points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
+    line1 = plt.Polygon(points, closed=True, fill=True, color='red')
+    line2 = plt.Polygon(points, closed=True, fill=True, color='red')
+    axs[0].add_patch(line1)
+    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours")
+    axs[1].add_patch(line2)
+    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours")
+
+    # Dynamic lines (theese are the lines/vals that will update during the simulation)
+    line1, = axs[0].plot([], [], 'o-', lw=2)
+    line2, = axs[1].plot([], [], 'o-', lw=2)
+    line = [line1, line2]
+
+    # animation for each frame
+    def animate(i):
+        # all x axis values are in the even-numbered columns
+        thisx1 = link_positions_x1[i, :] # get the current row of joint angles (x vals)
+        thisx2 = link_positions_x2[i, :] # get the current row of joint angles (x vals)
+        # all y axis value are in the odd-numbered columns
+        thisy1 = link_positions_y1[i, :] # get the current row of joint angles (y vals)
+        thisy2 = link_positions_y2[i, :] # get the current row of joint angles (y vals)
+
+        if i == 0:
+            history_x1.clear()
+            history_y1.clear()
+            history_x2.clear()
+            history_y2.clear()
+
+        # History only tracks the end effector
+        history_x1.appendleft(thisx1[-1])
+        history_y1.appendleft(thisy1[-1])
+        history_x2.appendleft(thisx2[-1])
+        history_y2.appendleft(thisy2[-1])
+
+        # Set current state of (x,y) for each joint
+        line[0].set_data(thisx1, thisy1)
+        # trace[0].set_data(history_x1, history_y1)
+        line[1].set_data(thisx2, thisy2)
+        # trace[1].set_data(history_x2, history_y2)
+
+        return line #, trace, time_text
+
+    ani = animation.FuncAnimation(
+        fig, animate, n_time_steps, interval=30*(dt* n_time_steps), blit=True
+    )
+
+    # Goal position
+    axs[0].plot(x_goal[0], x_goal[1], '-o')  # Goal position
+    axs[1].plot(x_goal[0], x_goal[1], '-o')  # Goal position
+    axs[0].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+    axs[1].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+
+    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
+    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=14)
+    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=14)
+    axs[0].legend(fontsize=14)
+    axs[1].legend(fontsize=14)
+    plt.get_current_fig_manager().full_screen_toggle()
+
+    return ani
 
 def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
     """
@@ -156,7 +289,7 @@ def get_traj_and_simulate2d(qdotdot, robot_arm, x_goal, init_condit, dt):
         return line, trace, time_text
 
     ani = animation.FuncAnimation(
-        fig, animate, n_time_steps, interval=dt * n_time_steps, blit=True
+        fig, animate, n_time_steps, interval=10*(dt* n_time_steps), blit=True
     )
 
     # Goal position
@@ -360,18 +493,58 @@ def training_data_gen(robot_arm):
 if __name__ == "__main__":
     braccio_robot = Braccio3D()
     Theta, task_info = training_data_gen(braccio_robot)
-    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
-                           for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
-    init_condit = [np.array([np.pi/2, np.pi/2, np.pi/2, np.pi/2]), np.array([0, 0, 0, 0])]
-    _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
 
-    backend = Swift()   
+    # TODO: @pranshu you can put the path to the data you need here
+    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/init_data_3D.csv"
+    pibb_data_df = pd.read_csv(data_csv_path)
+    q_ends = pibb_data_df.pop("gen_q")
 
-    backend.launch()                    # activate it
-    backend.add(braccio_robot)          # add robot to the 3D scene
+    # TODO: might need some cleaning
+    q_ends = q_ends.to_list()
+    q_ends_clean = []
+    for q_end in q_ends:
+        q_end = q_end[1:-1].strip().split(" ")
+        q_end = [q for q in q_end if q != ""]
+        q_end = np.array([float(q) for q in q_end])
+        q_ends_clean.append(q_end)
+    q_ends = q_ends_clean
+    print(q_ends_clean)
+    
+    concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
+    print(pibb_data_df.head())
 
-    for qk in gen_q:                    # for each joint configuration on trajectory
-        braccio_robot.q = qk            # update the robot state
-        backend.step(dt = 1)            # update visualization
-        time.sleep(0.5)
-    backend.hold()
+    # Theta = np.array(
+    #     [
+    #         [ 8.26676483, -5.30155064,  6.84200035,  3.97223424],
+    #         [ 3.21325747,  0.94689616, -0.40225434,  1.46663381], 
+    #         [ 5.24084877,  0.46927471, -1.60005178,  1.37439546],
+    #         [ 1.26010728,  0.32400262,  1.23270931,  0.68556777],
+    #         [ 2.26210504, -2.35412082,  0.91483854, -0.34907162]
+    #     ]
+    # )
+    # gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
+    #                        for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+    # init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
+    # _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
+
+    # print(gen_q[-1, :])
+
+    # backend = Swift()   
+    # backend.launch()                    # activate it
+
+    # c = sg.Cuboid(
+    #     scale=[0.05, 0.05, 0.05],
+    #     base=SE3(-0.1315935483132926,	0.0633721128665039,	0.2746948066672217),
+    #     color="blue"
+    # )
+
+    # cube_id = backend.add(c)
+
+    
+    # backend.add(braccio_robot)          # add robot to the 3D scene
+
+    # for qk in gen_q:                    # for each joint configuration on trajectory
+    #     braccio_robot.q = qk            # update the robot state
+    #     backend.step(dt = 1)            # update visualization
+    #     time.sleep(0.2)
+    # backend.hold()
