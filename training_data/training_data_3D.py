@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import sys
 import random
 import matplotlib.pyplot as plt
@@ -130,7 +131,9 @@ def find_closest_target_pt(x_ee, y_ee, z_ee, X_target, Y_target, Z_target):
 
 
 def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle):
+    main_path = os.getcwd()
     robot = rb.Braccio3D()
+    os.chdir(main_path)
     n_arcs = len(X_cir)
 
     print("Initial joint angles are :")
@@ -245,7 +248,9 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle):
 
 
 def generate_training_data3D(init_joint_angles):
+    main_path = os.getcwd()
     robot = rb.Braccio3D()
+    os.chdir(main_path)
     # TODO: Get robot min length and max length
     X_cir, Y_cir, Z_cir = generate_target_pts_3D(
         0.16, 0.49, 0.035, np.pi/24, np.pi/24)
@@ -262,7 +267,9 @@ def generate_training_data3D(init_joint_angles):
 
 
 def idek_lmao(task_info, N=None):
+    main_path = os.getcwd()
     robot = rb.Braccio3D()
+    os.chdir(main_path)
     data_csv_path = "/home/pranshumalik14/Documents/projects/intuitive-arm-reach/training_data/20220409_1543_pdff_braccio.csv"
     pibb_data_df = pd.read_csv(data_csv_path)
     concat_input, flattened_theta, _, _ = clean_data(
@@ -309,7 +316,9 @@ def idek_lmao(task_info, N=None):
 
 
 if __name__ == "__main__":
+    main_path = os.getcwd()
     robot = rb.Braccio3D()
+    os.chdir(main_path)
     _, task_info = pdff_sim.training_data_gen(robot)
     init_joint_angles = idek_lmao(task_info)
     # init_joint_angles = None
