@@ -13,7 +13,7 @@ def acceleration_cost(qdotdot, t):
     return numerator
 
 
-def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e2):
+def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e4):
     x_TN = robot_arm.forward_kinematics(q)
     x_TN = np.array(x_TN)
 

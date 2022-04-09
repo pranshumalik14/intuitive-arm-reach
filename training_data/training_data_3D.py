@@ -10,6 +10,7 @@ import multiprocessing
 from joblib import Parallel, delayed
 
 sys.path.append('../scripts')
+from data_prep import clean_data
 from training_data import save_file, iterate_circular
 from task_info import numpy_linspace
 import robot_arm as rb
@@ -241,16 +242,43 @@ def generate_training_data3D(robot_arm, N = 10):
     # # TODO: how to get curq here?
     # cur_q = [0, 90, 90, 90, 0, 0]
     # init_joint_angles = [robot_arm.inverse_kinematics(point, cur_q) for point in init_starting_pts]
+    init_joint_angles = idek_lmao(N)
 
-    # num_cores = multiprocessing.cpu_count()
-    # Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i], robot_arm) for i in range(N))
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i], robot_arm) for i in range(N))
 
     cur_q = np.deg2rad([0, 30, 90, 90])
     explore_random_joint_angles(X_cir, Y_cir, Z_cir, cur_q, robot_arm)
 
+
+def idek_lmao(N = 10):
+    # TODO: @pranshu you can put the path to the data you need here
+    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/init_data_3D.csv"
+    pibb_data_df = pd.read_csv(data_csv_path)
+    q_ends = pibb_data_df.pop("gen_q")
+
+    # TODO: might need some cleaning
+    q_ends = q_ends.to_list()
+    q_ends_clean = []
+    for q_end in q_ends:
+        q_end = q_end[1:-1].strip().split(" ")
+        q_end = [q for q in q_end if q != ""]
+        q_end = np.array([float(q) for q in q_end])
+        q_ends_clean.append(q_end)
+    q_ends = q_ends_clean
+    # print(q_ends_clean)
+
+    # concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
+    # print(pibb_data_df.head())
+
+    random_q_end_idxs = random.sample(range(0, len(q_ends)), N)
+    random_q_ends = [q_ends[i] for i in random_q_end_idxs]
+    return random_q_ends
+
 if __name__ == "__main__":
     robot_arm = rb.Braccio3D()
-    generate_training_data3D(robot_arm)
+    # generate_training_data3D(robot_arm)
+    print(idek_lmao())
 
 
 

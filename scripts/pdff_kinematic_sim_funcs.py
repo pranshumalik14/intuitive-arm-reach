@@ -52,10 +52,20 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
         for i in range(1, n_time_steps):
             qdot[i, :] = qdot[i-1, :] + dt*qdotdot[i, :]
             q[i, :] = q[i-1, :] + dt*qdot[i, :]
+            q_i_old = q[i, :]
+            q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+            # print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+            # if not np.equal(q_i_old, q[i]).all():
+            #     print("CLIPPED YO")
     else:
         for i in range(1, n_time_steps):
             qdot[i] = qdot[i-1] + dt*qdotdot[i]
             q[i] = q[i-1] + dt*qdot[i]
+            q_i_old = q[i]
+            q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+            print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+            if not np.equal(q_i_old, q[i]).all():
+                print("CLIPPED YO")
 
     # Could use np.trapez but it gave me some weird error
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
@@ -482,10 +492,13 @@ def training_data_gen(robot_arm):
 
     # a function that generates a point within the robot_arm_length circle radius
     assert(isinstance(robot_arm, RobotArm))
-    x_target = np.array([0.14380348, 0.3495103, 0.11569066])
-    init_condit = [np.array([np.pi/2, np.pi/2, np.pi/2, np.pi/2]), np.array([0, 0, 0, 0])]
+    x_target = np.array([-0.1846800805813576,	0.2315814962053747,	0.2485445424121284])
+    init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
 
-    Theta, _, _, task_info = gen_theta(x_target, init_condit, robot_arm)
+    Theta, iter_count, J_hist, task_info = gen_theta(x_target, init_condit, robot_arm)
+    
+    plt.plot(range(iter_count+1), J_hist)
+    plt.show()
 
     return Theta, task_info
     
@@ -493,6 +506,10 @@ def training_data_gen(robot_arm):
 if __name__ == "__main__":
     braccio_robot = Braccio3D()
     Theta, task_info = training_data_gen(braccio_robot)
+
+    """
+    
+    
 
     # TODO: @pranshu you can put the path to the data you need here
     data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/init_data_3D.csv"
@@ -508,11 +525,9 @@ if __name__ == "__main__":
         q_end = np.array([float(q) for q in q_end])
         q_ends_clean.append(q_end)
     q_ends = q_ends_clean
-    print(q_ends_clean)
-    
+
     concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
     print(pibb_data_df.head())
-
     # Theta = np.array(
     #     [
     #         [ 8.26676483, -5.30155064,  6.84200035,  3.97223424],
@@ -522,29 +537,67 @@ if __name__ == "__main__":
     #         [ 2.26210504, -2.35412082,  0.91483854, -0.34907162]
     #     ]
     # )
-    # gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
-    #                        for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+
+    # iterate through theta
+    # foreach theta: get qdd
+    #       get q
+    #       loop over all q
+    #           check joint constraints
+    #               if fail: record
+    """
+    init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
+    # # print(flattened_theta.shape)
+    # count = 0
+    # for flattened in flattened_theta:
+    #     theta_reshaped = np.reshape(flattened, (task_info.B, task_info.N))
+    #     print(theta_reshaped)
+        # break
+        # gen_qdotdot = np.array(  [qdotdot_gen(task_info, theta_reshaped, t)
+        #                     for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+        # _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
+
+        # for q in gen_q:
+        #     joint_constraints = ((braccio_robot.qlim[0,:] <= q) & (q <= braccio_robot.qlim[1,:])).all()
+        #     if not joint_constraints:
+        #         print("CONSTRAINT FAILED AT {}".format(str(count)))
+        #         print(q)
+        # count += 1
+
+    # theta_reshaped = np.reshape(flattened_theta[256], (task_info.B, task_info.N))
+    # x_target = np.array(concat_input[256][-3:])
+    # print(x_target)
     # init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
-    # _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
 
-    # print(gen_q[-1, :])
+    # Theta, iter_count, J_hist, task_info = gen_theta(x_target, init_condit, braccio_robot)
 
-    # backend = Swift()   
-    # backend.launch()                    # activate it
 
-    # c = sg.Cuboid(
-    #     scale=[0.05, 0.05, 0.05],
-    #     base=SE3(-0.1315935483132926,	0.0633721128665039,	0.2746948066672217),
-    #     color="blue"
-    # )
 
-    # cube_id = backend.add(c)
+    gen_qdotdot = np.array(  [qdotdot_gen(task_info, Theta, t)
+                        for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+    _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
+    
+    for q in gen_q:
+        joint_constraints = ((braccio_robot.qlim[0,:] <= q) & (q <= braccio_robot.qlim[1,:])).all()
+        if not joint_constraints:
+            print("CONSTRAINT FAILED")
+            print(q)
+
+    backend = Swift()   
+    backend.launch()                    # activate it
+
+    c = sg.Cuboid(
+        scale=[0.05, 0.05, 0.05],
+        base=SE3(np.array([-0.1846800805813576,	0.2315814962053747,	0.2485445424121284])),
+        color="blue"
+    )
+
+    cube_id = backend.add(c)
 
     
-    # backend.add(braccio_robot)          # add robot to the 3D scene
+    backend.add(braccio_robot)          # add robot to the 3D scene
 
-    # for qk in gen_q:                    # for each joint configuration on trajectory
-    #     braccio_robot.q = qk            # update the robot state
-    #     backend.step(dt = 1)            # update visualization
-    #     time.sleep(0.2)
-    # backend.hold()
+    for qk in gen_q:                    # for each joint configuration on trajectory
+        braccio_robot.q = qk            # update the robot state
+        backend.step(dt = 1)            # update visualization
+        time.sleep(0.2)
+    backend.hold()

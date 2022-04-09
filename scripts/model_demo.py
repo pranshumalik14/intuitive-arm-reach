@@ -117,7 +117,7 @@ if concat_input_file in os.listdir():
     print("Skip data prep, files already exist")
 else:
     print("Data Prep ...")
-    concat_input, flatten_theta, _, _ = data_prep.clean_data(pibb_data_df, task_info)
+    concat_input, flatten_theta, _, _ = data_prep.clean_data(pibb_data_df, task_info, planar=True)
 
     np.save(concat_input_file, concat_input)
     np.save(flatten_theta_file, flatten_theta)
