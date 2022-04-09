@@ -1,5 +1,4 @@
 import numpy as np
-
 import sys
 import random
 import matplotlib.pyplot as plt
@@ -8,18 +7,21 @@ import pandas as pd
 from datetime import date, datetime
 import multiprocessing
 from joblib import Parallel, delayed
+from loky import wrap_non_picklable_objects
 
 sys.path.append('../scripts')
-from data_prep import clean_data
-from training_data import save_file, iterate_circular
-from task_info import numpy_linspace
-import robot_arm as rb
-import pdff_kinematic_sim_funcs as pdff_sim
 from PIBB_helper import qdotdot_gen
+import pdff_kinematic_sim_funcs as pdff_sim
+import robot_arm as rb
+from task_info import numpy_linspace
+from training_data import save_file, iterate_circular
 from data_prep import clean_data
 
+
 time_str = datetime.now().strftime("%Y%m%d_%H%M")
-columns = ["init_joint_angles", "x_target", "y_target", "z_target",  "Theta", "iter_count", "cost"]
+columns = ["init_joint_angles", "x_target", "y_target",
+           "z_target",  "Theta", "iter_count", "cost"]
+# global init_joint_angles
 
 def cart2sphe(x, y, z):
     """
@@ -31,6 +33,7 @@ def cart2sphe(x, y, z):
     phi = np.arctan2(np.sqrt(x**2+y**2), z)
     return (rho, phi, theta)
 
+
 def sphe2cart(rho, phi, theta):
     """
     Convert spheical coordinates into cartesian
@@ -40,6 +43,7 @@ def sphe2cart(rho, phi, theta):
     y = rho * np.cos(phi) * np.sin(theta)
     z = rho * np.sin(phi)
     return (x, y, z)
+
 
 def generate_target_pts_on_arc(rho, d_theta, d_phi, ds_phi, ds_theta):
     X_dum, Y_dum, Z_dum = [], [], []
@@ -69,6 +73,7 @@ def generate_target_pts_on_arc(rho, d_theta, d_phi, ds_phi, ds_theta):
 
     return np.array(X_dum), np.array(Y_dum), np.array(Z_dum)
 
+
 def generate_target_pts_3D(min_rho, max_rho, d_rho, d_theta, d_phi):
     """
     - Theta strictly starts from 0 to 180
@@ -86,13 +91,14 @@ def generate_target_pts_3D(min_rho, max_rho, d_rho, d_theta, d_phi):
         X_circles.append(x)
         Y_circles.append(y)
         Z_circles.append(z)
-        
+
     return X_circles, Y_circles, Z_circles
+
 
 def visualize_circles(Xs, Ys, Zs):
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(projection='3d')
-    
+
     for i in range(len(Xs)):
         for j in range(len(Xs[i])):
             ax.scatter(Xs[i][j], Ys[i][j], Zs[i][j])
@@ -100,10 +106,11 @@ def visualize_circles(Xs, Ys, Zs):
     plt.savefig('training_data_scatter3D.png')
     plt.show()
 
+
 def find_closest_target_pt(x_ee, y_ee, z_ee, X_target, Y_target, Z_target):
     def euc_dist(x1, y1, z1, x2, y2, z2):
         return np.sqrt((y2-y1)**2 + (x2-x1)**2 + (z2-z1)**2)
-    
+
     print(X_target)
     n_target_pts = len(X_target)
 
@@ -111,49 +118,52 @@ def find_closest_target_pt(x_ee, y_ee, z_ee, X_target, Y_target, Z_target):
     min_dist = np.Inf
 
     for i in range(n_target_pts):
-        dist = euc_dist(X_target[i], Y_target[i], Z_target[i], x_ee, y_ee, z_ee)
+        dist = euc_dist(X_target[i], Y_target[i],
+                        Z_target[i], x_ee, y_ee, z_ee)
         print(dist)
 
         if dist < min_dist:
             min_dist = dist
             closest_idx = i
-    
+
     return closest_idx
 
-def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm):
+
+def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle):
+    robot = rb.Braccio3D()
     n_arcs = len(X_cir)
 
     print("Initial joint angles are :")
     print(init_joint_angle)
 
     # call forward kinematics here, to determine the closest point
-    x_ee, y_ee, z_ee = robot_arm.forward_kinematics(init_joint_angle)
+    x_ee, y_ee, z_ee = robot.forward_kinematics(init_joint_angle)
 
     B = 5
-    N, _, _ = robot_arm.get_arm_params()
-
+    N, _, _ = robot.get_arm_params()
 
     for arc_idx in range(n_arcs):
         n_circles = len(X_cir[arc_idx])
         for circle_idx in range(n_circles):
 
-            print("############### CIRCLE NO: {}/{} ###############".format(circle_idx+1, n_circles+1))
+            print(
+                "############### CIRCLE NO: {}/{} ###############".format(circle_idx+1, n_circles))
             X_target = X_cir[arc_idx][circle_idx]
             Y_target = Y_cir[arc_idx][circle_idx]
             Z_target = Z_cir[arc_idx][circle_idx]
 
-
             n_pts_on_circle = len(X_target)
-            
+
             index = 0
-            final_training_data = np.zeros(n_pts_on_circle * len(columns), dtype=object).reshape((n_pts_on_circle, len(columns)))
+            final_training_data = np.zeros(
+                n_pts_on_circle * len(columns), dtype=object).reshape((n_pts_on_circle, len(columns)))
 
             closest_idx = find_closest_target_pt(
                 x_ee, y_ee, z_ee,
                 X_target, Y_target, Z_target
             )
 
-            # TODO: What changes here is that it is not necessary to n_pts_on_circle//2 need to be taken 
+            # TODO: What changes here is that it is not necessary to n_pts_on_circle//2 need to be taken
             # If 10 pts on circle and closest idx is 3, then 0-3 has one matrix (CW)
             # 3-9 is another (CCW)
 
@@ -188,11 +198,11 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
 
                 Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
                     x_target=np.array([X_buf_cw[j], Y_buf_cw[j], Z_buf_cw[j]]),
-                    init_condit = [init_joint_angle, np.zeros(4)],
-                    robot_arm=robot_arm,
+                    init_condit=[init_joint_angle, np.zeros(4)],
+                    robot_arm=robot,
                     B=B,
                     N=N,
-                    dt = 5e-2,
+                    dt=5e-2,
                     Theta_matrix=Theta_matrix
                 )
 
@@ -211,12 +221,13 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
                 final_training_data[index, 3] = Z_buf_ccw[j]
 
                 Theta_matrix, iter_count, J_hist, task_info = pdff_sim.gen_theta(
-                    x_target=np.array([X_buf_ccw[j], Y_buf_ccw[j], Z_buf_ccw[j]]),
-                    init_condit = [init_joint_angle, np.zeros(4)],
-                    robot_arm=robot_arm,
+                    x_target=np.array(
+                        [X_buf_ccw[j], Y_buf_ccw[j], Z_buf_ccw[j]]),
+                    init_condit=[init_joint_angle, np.zeros(4)],
+                    robot_arm=robot,
                     B=B,
                     N=N,
-                    dt = 5e-2,
+                    dt=5e-2,
                     Theta_matrix=Theta_matrix
                 )
 
@@ -225,53 +236,57 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
                 final_training_data[index, 6] = J_hist[-1]
 
                 index = index + 1
-        
+
             df = pd.DataFrame(
                 data=final_training_data,
                 columns=columns
             )
             save_file(df)
 
-def generate_training_data3D(robot_arm, joint_angles = None):
+
+def generate_training_data3D(init_joint_angles):
+    robot = rb.Braccio3D()
     # TODO: Get robot min length and max length
-    X_cir, Y_cir, Z_cir = generate_target_pts_3D(0.16, 0.49, 0.035, np.pi/24, np.pi/24)
+    X_cir, Y_cir, Z_cir = generate_target_pts_3D(
+        0.16, 0.49, 0.035, np.pi/24, np.pi/24)
     assert(len(X_cir) == len(Y_cir) == len(Z_cir))
     # visualize_circles(X_cir, Y_cir, Z_cir)
 
     # @PRANSHU & PRITHVI use this for actual training gen
-    # num_cores = multiprocessing.cpu_count()
-    # Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, joint_angles[i], robot_arm) for i in range(len(joint_angles)))
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i]) for i in range(len(init_joint_angles)))
 
     # @PRANSHU & PRITHVI use this to generate init_condit, comment out otherwise
-    cur_q = np.deg2rad([0, 30, 90, 90])
-    explore_random_joint_angles(X_cir, Y_cir, Z_cir, cur_q, robot_arm)
+    # cur_q = np.deg2rad([0, 30, 90, 90])
+    # explore_random_joint_angles(X_cir, Y_cir, Z_cir, cur_q, robot)
 
 
-def idek_lmao(robot_arm, task_info, N = None):
-
-    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/dummy.csv"
+def idek_lmao(task_info, N=None):
+    robot = rb.Braccio3D()
+    data_csv_path = "/home/pranshumalik14/Documents/projects/intuitive-arm-reach/training_data/20220409_1543_pdff_braccio.csv"
     pibb_data_df = pd.read_csv(data_csv_path)
-    concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
+    concat_input, flattened_theta, _, _ = clean_data(
+        pibb_data_df, task_info, planar=False)
     print(pibb_data_df.head())
     print(pibb_data_df.info())
 
     # TODO: Can drop rows with cost history greater than 100
-    
+
     # Need to generate qend for each flattened theta
     q_ends = []
 
     for i, theta in enumerate(flattened_theta):
         reshaped = np.reshape(theta, (task_info.B, task_info.N))
         gen_qdotdot = np.array([qdotdot_gen(task_info, reshaped, t)
-                            for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+                                for t in numpy_linspace(0, task_info.T, task_info.dt)])
         init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
         # print(concat_input[i][-3:])
-        _, gen_q, _, _ = pdff_sim.get_traj(gen_qdotdot, robot_arm, task_info.dt, init_condit)
-        q_ends.append(gen_q[-1,:])
-    
-    print(q_ends)
+        _, gen_q, _, _ = pdff_sim.get_traj(
+            gen_qdotdot, robot, task_info.dt, init_condit)
+        q_ends.append(gen_q[-1, :])
+
     print(len(q_ends))
-    
+
     # q_ends = pibb_data_df.pop("gen_q")
 
     # # TODO: might need some cleaning
@@ -292,13 +307,10 @@ def idek_lmao(robot_arm, task_info, N = None):
     else:
         return q_ends
 
+
 if __name__ == "__main__":
-    robot_arm = rb.Braccio3D()
-
-    # _, task_info = pdff_sim.training_data_gen(robot_arm)
-    # init_joint_angles = idek_lmao(robot_arm, task_info)
-    init_joint_angles = None
-    generate_training_data3D(robot_arm, init_joint_angles)
-
-
-
+    robot = rb.Braccio3D()
+    _, task_info = pdff_sim.training_data_gen(robot)
+    init_joint_angles = idek_lmao(task_info)
+    # init_joint_angles = None
+    generate_training_data3D(init_joint_angles)
