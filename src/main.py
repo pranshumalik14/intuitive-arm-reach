@@ -5,6 +5,7 @@ import keyboard
 from spatialmath import SE3
 from robot.Braccio import Braccio
 from driver.robot_driver import BraccioRobotDriver
+from scripts.pdff_kinematic_sim_funcs import pdff_traj
 from vision.vision import vision_run
 from multiprocessing import Process, Pipe
 from roboticstoolbox.backends.swift import Swift
@@ -126,7 +127,14 @@ if __name__ == "__main__":
                 else:
                     print("[MAIN] IK qsol Invalid (Skipped)")
             elif SOLVER == "RTA":
-                raise NotImplementedError  # todo
+                q_sol = pdff_traj([rad_q, np.zeros(4)], goal_pos, braccio)
+                for i, q in enumerate(q_sol):
+                    if ((i != (len(q_sol)-1)) and (i % 2 == 0)):
+                        continue
+                    if ((q >= 0) & (q <= 180)).all():
+                        if MODE == "DEMO":
+                            braccio_driver.set_joint_angles(q)
+                        update_viz(np.deg2rad(q[:-2]), goal_pos)
             elif SOLVER == "RTM":
                 raise NotImplementedError  # todo
             else:
