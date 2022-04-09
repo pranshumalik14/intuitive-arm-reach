@@ -7,6 +7,8 @@ from robot.Braccio import Braccio
 from driver.robot_driver import BraccioRobotDriver
 from vision.vision import vision_run
 from multiprocessing import Process, Pipe
+from roboticstoolbox.backends.swift import Swift
+import spatialgeometry as sg
 
 # set reach solver and operation mode
 global SOLVER
@@ -23,6 +25,19 @@ global braccio
 main_path = os.getcwd()
 braccio = Braccio()
 os.chdir(main_path)
+
+# setup visualization environment
+global env, goal_obj
+braccio.q = np.deg2rad([0, 15, 90, 90])
+env = Swift()
+env.launch()
+env.add(braccio)
+goal_obj = sg.Cuboid(
+    scale=[0.05, 0.05, 0.05],
+    base=SE3(0, 0, 0),
+    color="blue"
+)
+env.add(goal_obj)
 
 # define goal region
 global goal_min, goal_max
@@ -61,9 +76,18 @@ if __name__ == "__main__":
             print("[MAIN] Solver set to RTM")
         time.sleep(0.2)
 
+    def update_viz(q, goal_pos):
+        global env, goal_obj, braccio
+
+        braccio.q = q
+        env.remove(goal_obj)
+        goal_obj.base = SE3(goal_pos)
+        env.add(goal_obj)
+        env.step()
+
     def solver_loop():
         global main_driverproc_pipe, STATE, vis_msg, SOLVER, orig2vis_frame
-        global goal_min, goal_max, braccio_driver
+        global goal_min, goal_max, braccio_driver, braccio, env, goal_obj
 
         if STATE == "calibrate_origin":
             main_driverproc_pipe.send("vision_calib_orig2vis_frame")
@@ -87,8 +111,7 @@ if __name__ == "__main__":
                 deg_q = np.array(braccio_driver.read()['joint_angles'])
                 print("[MAIN] Current Joint Configuration: {}".format(deg_q))
                 rad_q = np.deg2rad(deg_q)
-            # elif MODE == "SIMULATION":
-            #     # todo: get current joint config from sim
+                update_viz(rad_q[:-2], goal_pos)
 
             # send problem to reach solver and make robot go to goal pos
             if SOLVER == "IK":
@@ -99,8 +122,7 @@ if __name__ == "__main__":
                 if ((q_sol >= 0) & (q_sol <= 180)).all():
                     if MODE == "DEMO":
                         braccio_driver.set_joint_angles(q_sol)
-                    # elif MODE == "SIMULATION":
-                    #     # do something
+                    update_viz(np.deg2rad(q_sol[:-2]), goal_pos)
                 else:
                     print("[MAIN] IK qsol Invalid (Skipped)")
             elif SOLVER == "RTA":
