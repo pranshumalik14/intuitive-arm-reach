@@ -13,7 +13,7 @@ def acceleration_cost(qdotdot, t):
     return numerator
 
 
-def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e4):
+def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-7, kT=1e4):
     x_TN = robot_arm.forward_kinematics(q)
     x_TN = np.array(x_TN)
 
@@ -22,6 +22,8 @@ def cost_function(target_pos, q, qdotdot, robot_arm, kt=1e-5, kT=1e4):
     norm_reach_cost = np.linalg.norm(x_TN - target_pos)**2
     # : A cost that corresponds to the largest angle over all the joints at the end of the movement
     comfort_cost = np.max(q[-1, :])
+    comfort_cost = comfort_cost + np.clip(q[-1, 2]-np.pi/2, 0, np.Inf)**2
+    # traj_joint_limits_cost = robot_arm.qlim[0, :]
     C_T = kT*(norm_reach_cost) + comfort_cost
 
     # acce cost
