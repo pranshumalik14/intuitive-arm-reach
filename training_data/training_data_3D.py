@@ -15,6 +15,8 @@ from training_data import save_file, iterate_circular
 from task_info import numpy_linspace
 import robot_arm as rb
 import pdff_kinematic_sim_funcs as pdff_sim
+from PIBB_helper import qdotdot_gen
+from data_prep import clean_data
 
 time_str = datetime.now().strftime("%Y%m%d_%H%M")
 columns = ["init_joint_angles", "x_target", "y_target", "z_target",  "Theta", "iter_count", "cost"]
@@ -190,6 +192,7 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
                     robot_arm=robot_arm,
                     B=B,
                     N=N,
+                    dt = 5e-2,
                     Theta_matrix=Theta_matrix
                 )
 
@@ -213,6 +216,7 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
                     robot_arm=robot_arm,
                     B=B,
                     N=N,
+                    dt = 5e-2,
                     Theta_matrix=Theta_matrix
                 )
 
@@ -228,57 +232,73 @@ def explore_random_joint_angles(X_cir, Y_cir, Z_cir, init_joint_angle, robot_arm
             )
             save_file(df)
 
-def generate_training_data3D(robot_arm, N = 10):
+def generate_training_data3D(robot_arm, joint_angles = None):
     # TODO: Get robot min length and max length
     X_cir, Y_cir, Z_cir = generate_target_pts_3D(0.16, 0.49, 0.035, np.pi/24, np.pi/24)
     assert(len(X_cir) == len(Y_cir) == len(Z_cir))
-    visualize_circles(X_cir, Y_cir, Z_cir)
+    # visualize_circles(X_cir, Y_cir, Z_cir)
 
-    # Need to pick N number of random target points, on which inverse kine would be applied and that would be chosen as a pseudo random config
-    # Need to generate N random indices between 0 and len(X_cir)
-    # rand_idxs = random.sample(range(0, len(X_cir)), N)
-    # init_starting_pts = [(X_cir[idx], Y_cir[idx], Z_cir[idx]) for idx in rand_idxs]
-    # print(init_starting_pts)
-    # # TODO: how to get curq here?
-    # cur_q = [0, 90, 90, 90, 0, 0]
-    # init_joint_angles = [robot_arm.inverse_kinematics(point, cur_q) for point in init_starting_pts]
-    init_joint_angles = idek_lmao(N)
+    # @PRANSHU & PRITHVI use this for actual training gen
+    # num_cores = multiprocessing.cpu_count()
+    # Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, joint_angles[i], robot_arm) for i in range(len(joint_angles)))
 
-    num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(explore_random_joint_angles)(X_cir, Y_cir, Z_cir, init_joint_angles[i], robot_arm) for i in range(N))
-
+    # @PRANSHU & PRITHVI use this to generate init_condit, comment out otherwise
     cur_q = np.deg2rad([0, 30, 90, 90])
     explore_random_joint_angles(X_cir, Y_cir, Z_cir, cur_q, robot_arm)
 
 
-def idek_lmao(N = 10):
-    # TODO: @pranshu you can put the path to the data you need here
-    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/init_data_3D.csv"
+def idek_lmao(robot_arm, task_info, N = None):
+
+    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/dummy.csv"
     pibb_data_df = pd.read_csv(data_csv_path)
-    q_ends = pibb_data_df.pop("gen_q")
+    concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
+    print(pibb_data_df.head())
+    print(pibb_data_df.info())
 
-    # TODO: might need some cleaning
-    q_ends = q_ends.to_list()
-    q_ends_clean = []
-    for q_end in q_ends:
-        q_end = q_end[1:-1].strip().split(" ")
-        q_end = [q for q in q_end if q != ""]
-        q_end = np.array([float(q) for q in q_end])
-        q_ends_clean.append(q_end)
-    q_ends = q_ends_clean
-    # print(q_ends_clean)
+    # TODO: Can drop rows with cost history greater than 100
+    
+    # Need to generate qend for each flattened theta
+    q_ends = []
 
-    # concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
-    # print(pibb_data_df.head())
+    for i, theta in enumerate(flattened_theta):
+        reshaped = np.reshape(theta, (task_info.B, task_info.N))
+        gen_qdotdot = np.array([qdotdot_gen(task_info, reshaped, t)
+                            for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
+        init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
+        # print(concat_input[i][-3:])
+        _, gen_q, _, _ = pdff_sim.get_traj(gen_qdotdot, robot_arm, task_info.dt, init_condit)
+        q_ends.append(gen_q[-1,:])
+    
+    print(q_ends)
+    print(len(q_ends))
+    
+    # q_ends = pibb_data_df.pop("gen_q")
 
-    random_q_end_idxs = random.sample(range(0, len(q_ends)), N)
-    random_q_ends = [q_ends[i] for i in random_q_end_idxs]
-    return random_q_ends
+    # # TODO: might need some cleaning
+    # q_ends = q_ends.to_list()
+    # q_ends_clean = []
+    # for q_end in q_ends:
+    #     q_end = q_end[1:-1].strip().split(" ")
+    #     q_end = [q for q in q_end if q != ""]
+    #     q_end = np.array([float(q) for q in q_end])
+    #     q_ends_clean.append(q_end)
+    # q_ends = q_ends_clean
+    # # print(q_ends_clean)
+
+    if N is not None:
+        random_q_end_idxs = random.sample(range(0, len(q_ends)), N)
+        random_q_ends = [q_ends[i] for i in random_q_end_idxs]
+        return random_q_ends
+    else:
+        return q_ends
 
 if __name__ == "__main__":
     robot_arm = rb.Braccio3D()
-    # generate_training_data3D(robot_arm)
-    print(idek_lmao())
+
+    # _, task_info = pdff_sim.training_data_gen(robot_arm)
+    # init_joint_angles = idek_lmao(robot_arm, task_info)
+    init_joint_angles = None
+    generate_training_data3D(robot_arm, init_joint_angles)
 
 
 

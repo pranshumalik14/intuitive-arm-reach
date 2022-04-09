@@ -343,7 +343,7 @@ def boundcovar(Sigma, lambda_min, lambda_max):
     # https://stackoverflow.com/questions/41515522/numpy-positive-semi-definite-warning
 
 
-def PIBB(task_info, Theta, Sigma, init_condit, tol=1e-3, max_iter=1000):
+def PIBB(task_info, Theta, Sigma, init_condit, tol=1e-3, max_iter=1000, min_iter = 10):
     print("######################### PIBB Algorithm Started #########################")
     print(init_condit)
     start_time = time.time()
@@ -363,7 +363,7 @@ def PIBB(task_info, Theta, Sigma, init_condit, tol=1e-3, max_iter=1000):
     Thetas = np.zeros(B * K * N).reshape((B, K, N))
     Ps = Js = np.zeros(K)
 
-    while (iter_count < max_iter) and (abs(delta_J) > tol):
+    while (iter_count < max_iter) and (abs(delta_J) > tol or iter_count < min_iter):
         iter_count += 1
 
 #         print("######################### ITER COUNT: {} #########################".format(iter_count))
@@ -497,8 +497,8 @@ def training_data_gen(robot_arm):
 
     Theta, iter_count, J_hist, task_info = gen_theta(x_target, init_condit, robot_arm)
     
-    plt.plot(range(iter_count+1), J_hist)
-    plt.show()
+    # plt.plot(range(iter_count+1), J_hist)
+    # plt.show()
 
     return Theta, task_info
     
@@ -506,7 +506,7 @@ def training_data_gen(robot_arm):
 if __name__ == "__main__":
     braccio_robot = Braccio3D()
     Theta, task_info = training_data_gen(braccio_robot)
-
+    task_info.dt = 5e-2
     """
     
     
@@ -528,16 +528,18 @@ if __name__ == "__main__":
 
     concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
     print(pibb_data_df.head())
-    # Theta = np.array(
-    #     [
-    #         [ 8.26676483, -5.30155064,  6.84200035,  3.97223424],
-    #         [ 3.21325747,  0.94689616, -0.40225434,  1.46663381], 
-    #         [ 5.24084877,  0.46927471, -1.60005178,  1.37439546],
-    #         [ 1.26010728,  0.32400262,  1.23270931,  0.68556777],
-    #         [ 2.26210504, -2.35412082,  0.91483854, -0.34907162]
-    #     ]
-    # )
 
+    """
+    Theta = np.array(
+        [
+            [-10.20514957,   9.23070055,  -2.61855343, -11.57820258],
+            [ -0.29524369,   4.55234511,  -5.7380135 ,  -4.70322221], 
+            [  0.26093846,   1.80283948,  -2.31021772,  -0.8200603 ], 
+            [  2.53652557,   0.98522066,  -4.94943732,   0.07339303], 
+            [ -2.3008665 ,  -0.67091751,   3.38834559,  -2.81938858]
+        ]	
+    )
+    """
     # iterate through theta
     # foreach theta: get qdd
     #       get q
@@ -587,7 +589,7 @@ if __name__ == "__main__":
 
     c = sg.Cuboid(
         scale=[0.05, 0.05, 0.05],
-        base=SE3(np.array([-0.1846800805813576,	0.2315814962053747,	0.2485445424121284])),
+        base=SE3(np.array([-0.1591656766152936,	0.3196477689282158,	0.1299676544637541])),
         color="blue"
     )
 
