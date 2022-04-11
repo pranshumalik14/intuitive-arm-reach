@@ -144,7 +144,7 @@ def holdout_data(pibb_data_df, strat="SKIP"):
 
 
 def clean_data(pibb_data_df, task_info, planar=True):
-    # pibb_data_df = pibb_data_df.where(pibb_data_df["init_joint_angles"] != "0").dropna(how="all")
+    pibb_data_df = pibb_data_df.where(pibb_data_df["init_joint_angles"] != "0").dropna(how="all")
 
     # if not planar:
     #     pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target", "z_target"], ignore_index=True)
