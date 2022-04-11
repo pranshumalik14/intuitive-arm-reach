@@ -114,11 +114,11 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
 
     # Figure set up
     fig, axs = plt.subplots(1, 2)
-    padding_factor = 1.5
+    padding_factor = 1.0
     axes_lim = arm_length*padding_factor
     
     for ax in axs:
-        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal')
+        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal', xlabel="x coordinate", ylabel="y coordinate")
         ax.grid()
 
     # tracking the history of movements
@@ -130,12 +130,12 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
 
     # Adding the base of the robot arm
     points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
-    line1 = plt.Polygon(points, closed=True, fill=True, color='red')
-    line2 = plt.Polygon(points, closed=True, fill=True, color='red')
+    line1 = plt.Polygon(points, closed=True, fill=True, color='blue')
+    line2 = plt.Polygon(points, closed=True, fill=True, color='blue')
     axs[0].add_patch(line1)
-    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours")
+    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours considered")
     axs[1].add_patch(line2)
-    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours")
+    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours considered")
 
     # Dynamic lines (theese are the lines/vals that will update during the simulation)
     line1, = axs[0].plot([], [], 'o-', lw=2)
@@ -176,16 +176,16 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     )
 
     # Goal position
-    axs[0].plot(x_goal[0], x_goal[1], '-o')  # Goal position
-    axs[1].plot(x_goal[0], x_goal[1], '-o')  # Goal position
-    axs[0].annotate('x_g', xy=(x_goal[0], x_goal[1]))
-    axs[1].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+    axs[0].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
+    axs[1].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
+    # axs[0].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
+    # axs[1].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
 
     annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
-    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=14)
-    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=14)
-    axs[0].legend(fontsize=14)
-    axs[1].legend(fontsize=14)
+    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=10)
+    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=10)
+    axs[0].legend(fontsize=8)
+    axs[1].legend(fontsize=8)
     plt.get_current_fig_manager().full_screen_toggle()
 
     return ani
