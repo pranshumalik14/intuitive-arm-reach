@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import robot_arm as rb
+import scripts.robot_arm as rb
 
 
 def numpy_linspace(start, stop, step):

@@ -2,7 +2,7 @@ import imp
 
 
 import numpy as np
-from robot_arm import RobotArm2D, RobotArm3D
+from scripts.robot_arm import RobotArm2D, RobotArm3D
 
 
 def acceleration_cost(qdotdot, t):
