@@ -8,11 +8,11 @@ import os
 import pandas as pd
 from roboticstoolbox.backends.swift import *
 
-from robot_arm import RobotArm2D, Braccio3D, RobotArm
-from task_info import numpy_linspace, TaskInfo
-from cost_functions import cost_function
-from PIBB_helper import qdotdot_gen
-from data_prep import clean_data
+from scripts.robot_arm import RobotArm2D, Braccio3D, RobotArm
+from scripts.task_info import numpy_linspace, TaskInfo
+from scripts.cost_functions import cost_function
+from scripts.PIBB_helper import qdotdot_gen
+from scripts.data_prep import clean_data
 
 from spatialmath import SE3
 import spatialgeometry as sg

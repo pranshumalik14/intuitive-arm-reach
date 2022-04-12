@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 import platform
-from robot_arm import RobotArm, RobotArm2D, RobotArm3D
-from task_info import TaskInfo, numpy_linspace
+from scripts.robot_arm import RobotArm, RobotArm2D, RobotArm3D
+from scripts.task_info import TaskInfo, numpy_linspace
 
 HOLDOUT = None
 

@@ -7,9 +7,9 @@ from os import path
 import os
 import pandas as pd
 
-import sys
-sys.path.append("../src/robot/")
-from Braccio import Braccio
+# import sys
+# sys.path.append("../src/robot/")
+from src.robot.Braccio import Braccio
 class RobotArm:
 
     @abstractmethod
