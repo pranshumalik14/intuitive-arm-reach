@@ -102,7 +102,7 @@ def draw_sim_start(robot_arm, init_condit):
     return fig, ax
 
 
-def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train):
+def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train, thresh):
     # Get q and qdot
     time_steps_1, q_1, qdot_1, qdotdot_1 = get_traj(
         qdotdots[0],
@@ -148,8 +148,12 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     line2 = plt.Polygon(points, closed=True, fill=True, color='blue')
     axs[0].add_patch(line1)
     axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours considered")
+    if thresh[0] is not None:
+        axs[0].scatter(thresh[0][0], thresh[0][1], c="r", label="neighbours rejected")
     axs[1].add_patch(line2)
     axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours considered")
+    if thresh[1] is not None:
+        axs[1].scatter(thresh[1][0], thresh[1][1], c="r", label="neighbours rejected")
 
     # Dynamic lines (theese are the lines/vals that will update during the simulation)
     line1, = axs[0].plot([], [], 'o-', lw=2)
@@ -522,6 +526,16 @@ def training_data_gen(robot_arm):
 
     return Theta, task_info
 
+
+def rtm_traj(init_condit, target, robot, model):
+    # TODO: is this how I should get task?
+    _, task = training_data_gen(robot)
+    optTheta = model([*init_condit[0], *target])
+    optqdotdot = np.array([qdotdot_gen(task, optTheta, t)
+                for t in numpy_linspace(0, task.T, task.dt)])
+    _, optq, _, _ = get_traj(
+        optqdotdot, robot, task.dt, init_condit)
+    return optq
 
 def pdff_traj(init_condit, target, robot, Theta=None):
 

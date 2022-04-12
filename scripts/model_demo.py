@@ -39,15 +39,22 @@ def onclick(event, robot_arm, filter_condition):
 
 
 def animate_multi_traj_to_point(interpolators, input, task_info, robot_arm, train):
+    input = np.array(input)
     theta_preds = [interpolator(input) for interpolator in interpolators]
     thetas_reshaped = [np.reshape(pred, ( task_info.B, task_info.N)) for pred in theta_preds]
 
     neighbors = [None] * len(interpolators)
+    rejected = [None] * len(interpolators)
     for i in range(len(interpolators)):
-        nearest_neighbours = interpolators[i].k_nearest_neightbours(input)
+        nearest_neighbours, rejected_neighbours = interpolators[i].k_nearest_neightbours(input)
         nearest_x = nearest_neighbours[:, 0]
         nearest_y = nearest_neighbours[:, 1]
         neighbors[i] = ((nearest_x, nearest_y))
+
+        if len(rejected_neighbours) != 0:
+            rej_x = rejected_neighbours[:, 0]
+            rej_y = rejected_neighbours[:, 1]
+            rejected[i] = ((rej_x, rej_y))
 
     target_pt = [input[-2], input[-1]]
     init_condit = [list(input[:3]), [0,0,0]]
@@ -67,11 +74,13 @@ def animate_multi_traj_to_point(interpolators, input, task_info, robot_arm, trai
         x_goal      = target_pt, 
         init_condit = init_condit, 
         dt          = task_info.dt,
-        train=neighbors 
+        train=neighbors,
+        thresh=rejected 
         )
     plt.show()
 
 def animate_traj_to_point(interpolator, input, task_info, robot_arm):
+    input = np.array(input)
     theta_pred = interpolator(input)
 
     theta_reshaped = np.reshape(theta_pred, ( task_info.B, task_info.N))
@@ -84,7 +93,7 @@ def animate_traj_to_point(interpolator, input, task_info, robot_arm):
         [
             qdotdot_gen(task_info, theta_reshaped, t) for t in numpy_linspace(0, task_info.T, task_info.dt)
         ]  
-        )
+    )
 
     time_steps, q, qdot, gen_qdotdot, ani = get_traj_and_simulate2d(
         qdotdot     = predicted_qdotdot, 
@@ -97,11 +106,11 @@ def animate_traj_to_point(interpolator, input, task_info, robot_arm):
     plt.get_current_fig_manager().full_screen_toggle()
     plt.show()
 
-data_path = '../training_data/20220327_2215_pibb_2D.csv'
+data_path = '../training_data/20220409_1550_pdff_planar.csv'
 task_info_path = '../training_data/20220327_2215_task_info.csv'
 
-concat_input_file = "concat_input.npy"
-flatten_theta_file = "flatten_theta.npy"
+concat_input_file = data_path+"_concat_input.npy"
+flatten_theta_file = data_path+"_flatten_theta.npy"
 
 
 pibb_data_df, task_info_df = data_prep.load_data(data_path, task_info_path)
@@ -117,7 +126,7 @@ if concat_input_file in os.listdir():
     print("Skip data prep, files already exist")
 else:
     print("Data Prep ...")
-    concat_input, flatten_theta, _, _ = data_prep.clean_data(pibb_data_df, task_info, planar=True)
+    concat_input, flatten_theta, _, _ = data_prep.clean_data(pibb_data_df, task_info, skip_factor=10, planar=True)
 
     np.save(concat_input_file, concat_input)
     np.save(flatten_theta_file, flatten_theta)
@@ -131,13 +140,15 @@ SCALAR = None
 nn_interp = IDW(concat_input, flatten_theta, K=1, scalar=SCALAR)
 idw_interp_3 = IDW(concat_input, flatten_theta, K=3, scalar=SCALAR)
 idw_interp_5 = IDW(concat_input, flatten_theta, K=5, scalar=SCALAR)
+idw_interp_5_t = IDW(concat_input, flatten_theta, K=5, scalar=SCALAR, threshold=0.2)
+idw_interp_5_s = IDW(concat_input, flatten_theta, K=5, scalar="CUST")
 print("Interpolator Training Complete")
 
 # Plot training data
 init_conditions = np.unique(concat_input[:, 0:3], axis=0)
 
 while(True):
-    for i in range(len(init_conditions)):
+    for i in range(len(init_conditions[:10])):
         print(str(i) + ": " + str(init_conditions[i]))
     init_choice = int(input("Choose an initial condition: "))
 
@@ -161,5 +172,5 @@ while(True):
     plt.show()
     # animate_traj_to_point(nn_interp, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
     # animate_traj_to_point(idw_interp_5, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm)
-    interps = [nn_interp, idw_interp_5]
+    interps = [idw_interp_5, idw_interp_5_s]
     animate_multi_traj_to_point(interps, [*filter_condition[0], X_TARGET, Y_TARGET], task_info, robot_arm, train=[XS, YS])
