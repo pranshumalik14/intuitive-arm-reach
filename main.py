@@ -63,8 +63,8 @@ global rad_q, deg_q
 deg_q = np.array([0, 30, 90, 90, 90, 10])
 rad_q = np.deg2rad(deg_q)
 
-# Load RTM model
-MODEL_PATH = None
+# load RTM model
+MODEL_PATH = "training_data/braccio_small_model_5nn.npy"
 RTM_MODEL = None
 if MODEL_PATH:
     RTM_MODEL = np.load(MODEL_PATH, allow_pickle=True).item()
@@ -161,13 +161,19 @@ if __name__ == "__main__":
             elif SOLVER == "RTM":
                 if RTM_MODEL is None:
                     raise ValueError("RTM Model not loaded")
-                q_sol = rtm_traj([rad_q, np.zeros(4)], goal_pos, braccio, RTM_MODEL)
+                q_sol = np.rad2deg(
+                    rtm_traj([rad_q, np.zeros(4)],
+                             goal_pos, braccio, RTM_MODEL)
+                ).astype(int)
                 for i, q in enumerate(q_sol):
                     if ((i != (len(q_sol)-1)) and (i % 2 == 0)):
                         continue
                     if ((q >= 0) & (q <= 180)).all():
                         if MODE == "DEMO":
-                            braccio_driver.set_joint_angles(q)
+                            braccio_driver.set_joint_angles(
+                                np.append(q, deg_q[-2:]))
+                        deg_q = np.append(q, deg_q[-2:])
+                        rad_q = np.deg2rad(deg_q)
                         update_viz(np.deg2rad(q[:-2]), goal_pos)
             else:
                 check_procexit_wait()
