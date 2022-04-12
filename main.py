@@ -147,7 +147,8 @@ if __name__ == "__main__":
                         continue
                     if ((q >= 0) & (q <= 180)).all():
                         if MODE == "DEMO":
-                            braccio_driver.set_joint_angles(np.append(q, deg_q[-2:]))
+                            braccio_driver.set_joint_angles(
+                                np.append(q, deg_q[-2:]))
                         deg_q = np.append(q, deg_q[-2:])
                         rad_q = np.deg2rad(deg_q)
                         update_viz(rad_q[:-2], goal_pos)
@@ -163,7 +164,7 @@ if __name__ == "__main__":
         global braccio_driver
         braccio_driver = BraccioRobotDriver(
             loop_rate=0.2,
-            port="4"
+            port="5"
         )
 
         # make robot go to calibration position
