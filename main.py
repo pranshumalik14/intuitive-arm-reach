@@ -10,7 +10,7 @@ from multiprocessing import Process, Pipe
 from roboticstoolbox.backends.swift import Swift
 import spatialgeometry as sg
 from scripts.robot_arm import Braccio3D
-from scripts.pdff_kinematic_sim_funcs import pdff_traj
+from scripts.pdff_kinematic_sim_funcs import pdff_traj, rtm_traj
 
 
 # set reach solver and operation mode
@@ -62,6 +62,12 @@ orig2vis_frame = None
 global rad_q, deg_q
 deg_q = np.array([0, 30, 90, 90, 90, 10])
 rad_q = np.deg2rad(deg_q)
+
+# Load RTM model
+MODEL_PATH = None
+RTM_MODEL = None
+if MODEL_PATH:
+    RTM_MODEL = np.load(MODEL_PATH, allow_pickle=True).item()
 
 if __name__ == "__main__":
     def check_procexit_wait():
@@ -152,7 +158,16 @@ if __name__ == "__main__":
                         rad_q = np.deg2rad(deg_q)
                         update_viz(rad_q[:-2], goal_pos)
             elif SOLVER == "RTM":
-                raise NotImplementedError  # todo
+                if RTM_MODEL is None:
+                    raise ValueError("RTM Model not loaded")
+                q_sol = rtm_traj([rad_q, np.zeros(4)], goal_pos, braccio, RTM_MODEL)
+                for i, q in enumerate(q_sol):
+                    if ((i != (len(q_sol)-1)) and (i % 2 == 0)):
+                        continue
+                    if ((q >= 0) & (q <= 180)).all():
+                        if MODE == "DEMO":
+                            braccio_driver.set_joint_angles(q)
+                        update_viz(np.deg2rad(q[:-2]), goal_pos)
             else:
                 check_procexit_wait()
                 # raise ValueError("Invalid Solver")

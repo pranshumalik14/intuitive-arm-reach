@@ -52,20 +52,14 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
         for i in range(1, n_time_steps):
             qdot[i, :] = qdot[i-1, :] + dt*qdotdot[i, :]
             q[i, :] = q[i-1, :] + dt*qdot[i, :]
-            q_i_old = q[i, :]
-            q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            # print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            # if not np.equal(q_i_old, q[i]).all():
-            #     print("CLIPPED YO")
+            if isinstance(robot_arm, Braccio3D):
+                q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
     else:
         for i in range(1, n_time_steps):
             qdot[i] = qdot[i-1] + dt*qdotdot[i]
             q[i] = q[i-1] + dt*qdot[i]
-            q_i_old = q[i]
-            q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            if not np.equal(q_i_old, q[i]).all():
-                print("CLIPPED YO")
+            if isinstance(robot_arm, Braccio3D):
+                q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
 
     # Could use np.trapez but it gave me some weird error
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
