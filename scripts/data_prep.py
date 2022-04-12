@@ -112,20 +112,22 @@ def skip_k_every_n(pibb_data_df, k=100, n=5):
     return skipped_df
 
 
-def by_init_condition(pibb_data_df):
+def by_init_condition(pibb_data_df, skip_factor):
     # uniformly sample points for each of the 10 joint configs
     holdout = []
 
     num_init_conditions = len(pibb_data_df["init_joint_angles"].drop_duplicates(inplace=False).to_numpy())
+    print(num_init_conditions)
     num_points = len(pibb_data_df.where(pibb_data_df["init_joint_angles"] == pibb_data_df["init_joint_angles"][0]).dropna(how="all"))
-
+    print(num_points)
+    
     keep = []
     for c in range(num_init_conditions):
         start = c*num_points
         end = (c+1)*num_points
         count = 0
         for i in range(start, end):
-            if count%33 == 0:
+            if count%skip_factor == 0:
                 keep.append(pibb_data_df[i:i+1])
             else:
                 holdout.append(i)
@@ -135,28 +137,28 @@ def by_init_condition(pibb_data_df):
     return skipped_df, holdout
 
 
-def holdout_data(pibb_data_df, strat="SKIP"):
+def holdout_data(pibb_data_df, skip_factor, strat="SKIP"):
     original_df = pibb_data_df
     if strat == "SKIP":
-        skipped_df, holdout = by_init_condition(pibb_data_df)
+        skipped_df, holdout = by_init_condition(pibb_data_df, skip_factor)
         return skipped_df, holdout, original_df
     raise Exception("SKIP strat only currently accepted")
 
 
-def clean_data(pibb_data_df, task_info, planar=True):
+def clean_data(pibb_data_df, task_info, skip_factor, planar=True):
     pibb_data_df = pibb_data_df.where(pibb_data_df["init_joint_angles"] != "0").dropna(how="all")
 
-    # if not planar:
-    #     pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target", "z_target"], ignore_index=True)
-    # else:
-    #     pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target"], ignore_index=True)
+    if not planar:
+        pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target", "z_target"], ignore_index=True)
+    else:
+        pibb_data_df = pibb_data_df.drop_duplicates(subset=["init_joint_angles", "x_target", "y_target"], ignore_index=True)
 
     original_df = None
     holdout = None
     if HOLDOUT is not None:
-        pibb_data_df, holdout, original_df = holdout_data(pibb_data_df)
+        pibb_data_df, holdout, original_df = holdout_data(pibb_data_df, skip_factor)
 
-    delimiter = "\r\n " if platform == "win32" else "\n "
+    delimiter = "\r\n " if platform.system() == "Windows" else "\n "
 
     # reshape x target
     x_target = pibb_data_df['x_target']

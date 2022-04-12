@@ -52,20 +52,14 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
         for i in range(1, n_time_steps):
             qdot[i, :] = qdot[i-1, :] + dt*qdotdot[i, :]
             q[i, :] = q[i-1, :] + dt*qdot[i, :]
-            q_i_old = q[i, :]
-            q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            # print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            # if not np.equal(q_i_old, q[i]).all():
-            #     print("CLIPPED YO")
+            if isinstance(robot_arm, Braccio3D):
+                q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
     else:
         for i in range(1, n_time_steps):
             qdot[i] = qdot[i-1] + dt*qdotdot[i]
             q[i] = q[i-1] + dt*qdot[i]
-            q_i_old = q[i]
-            q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            print(robot_arm.qlim[0, :], robot_arm.qlim[1, :])
-            if not np.equal(q_i_old, q[i]).all():
-                print("CLIPPED YO")
+            if isinstance(robot_arm, Braccio3D):
+                q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
 
     # Could use np.trapez but it gave me some weird error
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
@@ -102,7 +96,7 @@ def draw_sim_start(robot_arm, init_condit):
     return fig, ax
 
 
-def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train):
+def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, train, thresh):
     # Get q and qdot
     time_steps_1, q_1, qdot_1, qdotdot_1 = get_traj(
         qdotdots[0],
@@ -128,12 +122,11 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
 
     # Figure set up
     fig, axs = plt.subplots(1, 2)
-    padding_factor = 1.5
+    padding_factor = 1.0
     axes_lim = arm_length*padding_factor
 
     for ax in axs:
-        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim),
-               ylim=(-axes_lim, axes_lim), aspect='equal')
+        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal', xlabel="x coordinate", ylabel="y coordinate")
         ax.grid()
 
     # tracking the history of movements
@@ -145,12 +138,16 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
 
     # Adding the base of the robot arm
     points = [[0, 0], [-0.05, -0.1], [0.05, -0.1]]
-    line1 = plt.Polygon(points, closed=True, fill=True, color='red')
-    line2 = plt.Polygon(points, closed=True, fill=True, color='red')
+    line1 = plt.Polygon(points, closed=True, fill=True, color='blue')
+    line2 = plt.Polygon(points, closed=True, fill=True, color='blue')
     axs[0].add_patch(line1)
-    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours")
+    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours considered")
+    if thresh[0] is not None:
+        axs[0].scatter(thresh[0][0], thresh[0][1], c="r", label="neighbours rejected")
     axs[1].add_patch(line2)
-    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours")
+    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours considered")
+    if thresh[1] is not None:
+        axs[1].scatter(thresh[1][0], thresh[1][1], c="r", label="neighbours rejected")
 
     # Dynamic lines (theese are the lines/vals that will update during the simulation)
     line1, = axs[0].plot([], [], 'o-', lw=2)
@@ -195,19 +192,16 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     )
 
     # Goal position
-    axs[0].plot(x_goal[0], x_goal[1], '-o')  # Goal position
-    axs[1].plot(x_goal[0], x_goal[1], '-o')  # Goal position
-    axs[0].annotate('x_g', xy=(x_goal[0], x_goal[1]))
-    axs[1].annotate('x_g', xy=(x_goal[0], x_goal[1]))
+    axs[0].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
+    axs[1].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
+    # axs[0].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
+    # axs[1].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
 
-    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format(
-        [round(i, 3) for i in init_condit[0]], x_goal)
-    axs[0].set_title('Kinematic Simulation: {}NN'.format(
-        len(train[0][0])), fontsize=14)
-    axs[1].set_title('Kinematic Simulation: {}NN'.format(
-        len(train[1][0])), fontsize=14)
-    axs[0].legend(fontsize=14)
-    axs[1].legend(fontsize=14)
+    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
+    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=10)
+    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=10)
+    axs[0].legend(fontsize=8)
+    axs[1].legend(fontsize=8)
     plt.get_current_fig_manager().full_screen_toggle()
 
     return ani
@@ -526,6 +520,16 @@ def training_data_gen(robot_arm):
 
     return Theta, task_info
 
+
+def rtm_traj(init_condit, target, robot, model):
+    # TODO: is this how I should get task?
+    _, task = training_data_gen(robot)
+    optTheta = model([*init_condit[0], *target])
+    optqdotdot = np.array([qdotdot_gen(task, optTheta, t)
+                for t in numpy_linspace(0, task.T, task.dt)])
+    _, optq, _, _ = get_traj(
+        optqdotdot, robot, task.dt, init_condit)
+    return optq
 
 def pdff_traj(init_condit, target, robot, Theta=None):
 
