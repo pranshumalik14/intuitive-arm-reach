@@ -53,13 +53,15 @@ def get_traj(qdotdot, robot_arm, dt, init_condit=[None, None]):
             qdot[i, :] = qdot[i-1, :] + dt*qdotdot[i, :]
             q[i, :] = q[i-1, :] + dt*qdot[i, :]
             if isinstance(robot_arm, Braccio3D):
-                q[i] = np.clip(q[i, :], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+                q[i] = np.clip(q[i, :], robot_arm.qlim[0, :],
+                               robot_arm.qlim[1, :])
     else:
         for i in range(1, n_time_steps):
             qdot[i] = qdot[i-1] + dt*qdotdot[i]
             q[i] = q[i-1] + dt*qdot[i]
             if isinstance(robot_arm, Braccio3D):
-                q[i] = np.clip(q[i], robot_arm.qlim[0, :], robot_arm.qlim[1, :])
+                q[i] = np.clip(q[i], robot_arm.qlim[0, :],
+                               robot_arm.qlim[1, :])
 
     # Could use np.trapez but it gave me some weird error
     # qdot[:,0] = np.trapez(qdotdot, x = time_steps)
@@ -126,7 +128,8 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     axes_lim = arm_length*padding_factor
 
     for ax in axs:
-        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim, axes_lim), aspect='equal', xlabel="x coordinate", ylabel="y coordinate")
+        ax.set(autoscale_on=False, xlim=(-axes_lim, axes_lim), ylim=(-axes_lim,
+               axes_lim), aspect='equal', xlabel="x coordinate", ylabel="y coordinate")
         ax.grid()
 
     # tracking the history of movements
@@ -141,13 +144,17 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     line1 = plt.Polygon(points, closed=True, fill=True, color='blue')
     line2 = plt.Polygon(points, closed=True, fill=True, color='blue')
     axs[0].add_patch(line1)
-    axs[0].scatter(train[0][0], train[0][1], c="y", label="neighbours considered")
+    axs[0].scatter(train[0][0], train[0][1], c="y",
+                   label="neighbours considered")
     if thresh[0] is not None:
-        axs[0].scatter(thresh[0][0], thresh[0][1], c="r", label="neighbours rejected")
+        axs[0].scatter(thresh[0][0], thresh[0][1], c="r",
+                       label="neighbours rejected")
     axs[1].add_patch(line2)
-    axs[1].scatter(train[1][0], train[1][1], c="y", label="neighbours considered")
+    axs[1].scatter(train[1][0], train[1][1], c="y",
+                   label="neighbours considered")
     if thresh[1] is not None:
-        axs[1].scatter(thresh[1][0], thresh[1][1], c="r", label="neighbours rejected")
+        axs[1].scatter(thresh[1][0], thresh[1][1], c="r",
+                       label="neighbours rejected")
 
     # Dynamic lines (theese are the lines/vals that will update during the simulation)
     line1, = axs[0].plot([], [], 'o-', lw=2)
@@ -192,14 +199,19 @@ def get_multi_traj_and_simulate2d(qdotdots, robot_arm, x_goal, init_condit, dt, 
     )
 
     # Goal position
-    axs[0].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
-    axs[1].plot(x_goal[0], x_goal[1], 'x', linewidth=3, markersize=10, label="target point")  # Goal position
+    axs[0].plot(x_goal[0], x_goal[1], 'x', linewidth=3,
+                markersize=10, label="target point")  # Goal position
+    axs[1].plot(x_goal[0], x_goal[1], 'x', linewidth=3,
+                markersize=10, label="target point")  # Goal position
     # axs[0].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
     # axs[1].annotate('x_g', xy=(1.5*x_goal[0], x_goal[1]))
 
-    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format([round(i,3) for i in init_condit[0]], x_goal)
-    axs[0].set_title('Kinematic Simulation: {}NN'.format(len(train[0][0])), fontsize=10)
-    axs[1].set_title('Kinematic Simulation: {}NN'.format(len(train[1][0])), fontsize=10)
+    annotation_str = "Initial Configuration: {}\nTarget Point: {}".format(
+        [round(i, 3) for i in init_condit[0]], x_goal)
+    axs[0].set_title('Kinematic Simulation: {}NN'.format(
+        len(train[0][0])), fontsize=10)
+    axs[1].set_title('Kinematic Simulation: {}NN'.format(
+        len(train[1][0])), fontsize=10)
     axs[0].legend(fontsize=8)
     axs[1].legend(fontsize=8)
     plt.get_current_fig_manager().full_screen_toggle()
@@ -451,6 +463,7 @@ def gen_theta(
     h = 10 if args.get('h') is None else args.get('h')
     B = 5 if args.get('B') is None else args.get('B')
     K = 20 if args.get('K') is None else args.get('K')
+    max_iter = 1000 if args.get('max_iter') is None else args.get('max_iter')
 
     N, _, _ = robot_arm.get_arm_params()
     # Shape should be B * B * N but we have N * B * B -> indexing has to change accordingly
@@ -482,7 +495,8 @@ def gen_theta(
         task_info,
         Theta_matrix,
         Sigma_matrix,
-        init_condit
+        init_condit,
+        max_iter=max_iter
     )
     # print(Theta)
     # plt.plot(range(iter_count+1), J_hist)
@@ -523,19 +537,34 @@ def training_data_gen(robot_arm):
 
 def rtm_traj(init_condit, target, robot, model):
     # TODO: is this how I should get task?
-    _, task = training_data_gen(robot)
+    # _, task = training_data_gen(robot)
+    task = TaskInfo(
+        robotarm=robot,
+        lambda_min=0.05,
+        lambda_max=5,
+        B=5,
+        K=20,
+        N=4,
+        T=1,
+        h=10,
+        target_pos=target,
+        dt=5e-2
+    )
+
     optTheta = model([*init_condit[0], *target])
+    optTheta = np.reshape(optTheta, (task.B, task.N))
     optqdotdot = np.array([qdotdot_gen(task, optTheta, t)
-                for t in numpy_linspace(0, task.T, task.dt)])
+                           for t in numpy_linspace(0, task.T, task.dt)])
     _, optq, _, _ = get_traj(
         optqdotdot, robot, task.dt, init_condit)
-    return optq
+    return optq, optTheta
+
 
 def pdff_traj(init_condit, target, robot, Theta=None):
 
     if Theta is not None:
         optTheta, _, _, task = gen_theta(
-            target, init_condit, robot, Theta_matrix=Theta)
+            target, init_condit, robot, Theta_matrix=Theta, max_iter=100)
     else:
         optTheta, _, _, task = gen_theta(target, init_condit, robot)
 
@@ -544,110 +573,3 @@ def pdff_traj(init_condit, target, robot, Theta=None):
     _, optq, _, _ = get_traj(
         optqdotdot, robot, task.dt, init_condit)
     return optq
-
-
-if __name__ == "__main__":
-    braccio_robot = Braccio3D()
-    #
-    # Theta, task_info = training_data_gen(braccio_robot)
-    # task_info.dt = 5e-2
-    """
-    
-    
-
-    # TODO: @pranshu you can put the path to the data you need here
-    data_csv_path = "/Users/varunsampat/ECE496/intuitive-arm-reach/training_data/init_data_3D.csv"
-    pibb_data_df = pd.read_csv(data_csv_path)
-    q_ends = pibb_data_df.pop("gen_q")
-
-    # TODO: might need some cleaning
-    q_ends = q_ends.to_list()
-    q_ends_clean = []
-    for q_end in q_ends:
-        q_end = q_end[1:-1].strip().split(" ")
-        q_end = [q for q in q_end if q != ""]
-        q_end = np.array([float(q) for q in q_end])
-        q_ends_clean.append(q_end)
-    q_ends = q_ends_clean
-
-    concat_input, flattened_theta, _, _ = clean_data(pibb_data_df, task_info, planar=False)
-    print(pibb_data_df.head())
-
-    """
-    # Theta = np.array(
-    #     [[-0.5079216,  -3.60441374,  8.64566258,  7.30530718],
-    #      [-6.3241476, -4.87003058, 2.36161817,  3.18393472],
-    #      [3.32131782,  1.58246894, -1.2475003, 1.75456123],
-    #      [-0.77535865,  0.19473733, 0.5930149, 2.96604701],
-    #      [-2.75469696, -0.67679278, -0.51808206, 0.48742337]]
-    # )
-    """
-    # iterate through theta
-    # foreach theta: get qdd
-    #       get q
-    #       loop over all q
-    #           check joint constraints
-    #               if fail: record
-    """
-
-    init_condit = [
-        np.array([0, 0.52359878, 1.57079633, 1.57079633]), np.array([0, 0, 0, 0])]
-    Theta, iter_count, J_hist, task_info = gen_theta(
-        np.array([-0.270303579,	0.338949967,	0.228361325]), init_condit, braccio_robot)
-    plt.plot(range(iter_count+1), J_hist)
-    plt.show()
-    # # print(flattened_theta.shape)
-    # count = 0
-    # for flattened in flattened_theta:
-    #     theta_reshaped = np.reshape(flattened, (task_info.B, task_info.N))
-    #     print(theta_reshaped)
-    # break
-    # gen_qdotdot = np.array(  [qdotdot_gen(task_info, theta_reshaped, t)
-    #                     for t in numpy_linspace(0, task_info.T, task_info.dt)]  )
-    # _, gen_q, _, _ = get_traj(gen_qdotdot, braccio_robot, task_info.dt, init_condit)
-
-    # for q in gen_q:
-    #     joint_constraints = ((braccio_robot.qlim[0,:] <= q) & (q <= braccio_robot.qlim[1,:])).all()
-    #     if not joint_constraints:
-    #         print("CONSTRAINT FAILED AT {}".format(str(count)))
-    #         print(q)
-    # count += 1
-
-    # theta_reshaped = np.reshape(flattened_theta[256], (task_info.B, task_info.N))
-    # x_target = np.array(concat_input[256][-3:])
-    # print(x_target)
-    # init_condit = [np.deg2rad([0, 30, 90, 90]), np.array([0, 0, 0, 0])]
-
-    # Theta, iter_count, J_hist, task_info = gen_theta(x_target, init_condit, braccio_robot)
-
-    gen_qdotdot = np.array([qdotdot_gen(task_info, Theta, t)
-                            for t in numpy_linspace(0, task_info.T, task_info.dt)])
-    _, gen_q, _, _ = get_traj(
-        gen_qdotdot, braccio_robot, task_info.dt, init_condit)
-
-    for q in gen_q:
-        joint_constraints = ((braccio_robot.qlim[0, :] <= q) & (
-            q <= braccio_robot.qlim[1, :])).all()
-        if not joint_constraints:
-            print("CONSTRAINT FAILED")
-            print(q)
-
-    backend = Swift()
-    backend.launch()                    # activate it
-
-    c = sg.Cuboid(
-        scale=[0.05, 0.05, 0.05],
-        base=SE3(
-            np.array([-0.270303579,	0.338949967, 0.228361325])),
-        color="blue"
-    )
-
-    cube_id = backend.add(c)
-
-    backend.add(braccio_robot)          # add robot to the 3D scene
-
-    for qk in gen_q:                    # for each joint configuration on trajectory
-        braccio_robot.q = qk            # update the robot state
-        backend.step(dt=1)            # update visualization
-        time.sleep(0.2)
-    backend.hold()

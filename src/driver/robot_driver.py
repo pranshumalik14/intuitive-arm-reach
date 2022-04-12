@@ -91,6 +91,7 @@ class BraccioRobotDriver:
 
     def vision_calib_pose(self):
         self.write(struct.pack('>B', ST_CAMERA_CALIB))
+        time.sleep(5)
 
     def read(self):
         self.cnx.reset_input_buffer()

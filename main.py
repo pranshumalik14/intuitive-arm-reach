@@ -1,5 +1,6 @@
 import os
 import time
+from turtle import up
 import numpy as np
 import keyboard
 from spatialmath import SE3
@@ -15,7 +16,7 @@ from scripts.pdff_kinematic_sim_funcs import pdff_traj, rtm_traj
 
 # set reach solver and operation mode
 global SOLVER
-SOLVER = "IK"  # "IK", "RTA", or "RTM" (reach task algo/model)
+SOLVER = "IK"  # "IK", "RTA", "RTM", "RTM/A" (reach task algo/model)
 global MODE
 MODE = "DEMO"  # or "SIMULATION"
 # MODE = "SIMULATION"
@@ -59,12 +60,16 @@ global vis_msg, orig2vis_frame
 vis_msg = None
 orig2vis_frame = None
 
+global reached, last_reach_time
+reached = False
+last_reach_time = time.time()
+
 global rad_q, deg_q
 deg_q = np.array([0, 30, 90, 90, 90, 10])
 rad_q = np.deg2rad(deg_q)
 
 # load RTM model
-MODEL_PATH = "training_data/braccio_small_model_5nn.npy"
+MODEL_PATH = "training_data/braccio_large_model_5nn.npy"
 RTM_MODEL = None
 if MODEL_PATH:
     RTM_MODEL = np.load(MODEL_PATH, allow_pickle=True).item()
@@ -89,11 +94,20 @@ if __name__ == "__main__":
         elif keyboard.is_pressed("m"):
             SOLVER = "RTM"
             print("[MAIN] Solver set to RTM")
+        elif keyboard.is_pressed("r"):
+            SOLVER = "RTM/A"
+            print("[MAIN] Solver set to RTM/A")
+        elif keyboard.is_pressed("c"):
+            STATE = "calibrate"
+            print("[MAIN] Going to calibration state")
         time.sleep(0.2)
 
     def update_viz(q, goal_pos, dt=0.2):
-        global env, goal_obj, braccio
-
+        global env, goal_obj, braccio, reached
+        if reached:
+            goal_obj.color = "green"
+        else:
+            goal_obj.color = "blue"
         braccio.q = q
         env.remove(goal_obj)
         goal_obj.base = SE3(goal_pos)
@@ -103,12 +117,18 @@ if __name__ == "__main__":
     def solver_loop():
         global main_driverproc_pipe, STATE, vis_msg, SOLVER, orig2vis_frame
         global goal_min, goal_max, braccio_driver, braccio, env, goal_obj
-        global deg_q, rad_q
+        global deg_q, rad_q, reached, last_reach_time
 
         if STATE == "calibrate_origin":
             main_driverproc_pipe.send("vision_calib_orig2vis_frame")
             orig2vis_frame = main_driverproc_pipe.recv()
             print("[MAIN] Camera Origin: {}".format(orig2vis_frame.t))
+            STATE = "get_curr_goal"
+        elif STATE == "calibrate":
+            if MODE == "DEMO":
+                braccio_driver.vision_calib_pose()
+            deg_q = np.array([0, 30, 90, 90, 90, 10])
+            rad_q = np.deg2rad(deg_q)
             STATE = "get_curr_goal"
         elif STATE == "get_curr_goal":
             main_driverproc_pipe.send("vision_curr_orig2goal_pos")
@@ -129,6 +149,13 @@ if __name__ == "__main__":
                 rad_q = np.deg2rad(deg_q)
             update_viz(rad_q[:-2], goal_pos)
 
+            if time.time() - last_reach_time < 10:
+                check_procexit_wait()
+                return
+            else:
+                reached = False
+                update_viz(rad_q[:-2], goal_pos)
+
             # send problem to reach solver and make robot go to goal pos
             if SOLVER == "IK":
                 q_sol = np.rad2deg(
@@ -141,6 +168,8 @@ if __name__ == "__main__":
                     deg_q = q_sol
                     rad_q = np.deg2rad(deg_q)
                     update_viz(rad_q[:-2], goal_pos)
+                    reached = True
+                    last_reach_time = time.time()
                 else:
                     print("[MAIN] IK qsol Invalid (Skipped)")
             elif SOLVER == "RTA":
@@ -158,13 +187,16 @@ if __name__ == "__main__":
                         deg_q = np.append(q, deg_q[-2:])
                         rad_q = np.deg2rad(deg_q)
                         update_viz(rad_q[:-2], goal_pos)
+                reached = True
+                last_reach_time = time.time()
             elif SOLVER == "RTM":
                 if RTM_MODEL is None:
                     raise ValueError("RTM Model not loaded")
-                q_sol = np.rad2deg(
-                    rtm_traj([rad_q, np.zeros(4)],
-                             goal_pos, braccio, RTM_MODEL)
-                ).astype(int)
+                q_rtm, _ = rtm_traj(
+                    [rad_q[:-2], np.zeros(4)], goal_pos, braccio, RTM_MODEL
+                )
+                q_sol = np.rad2deg(q_rtm).astype(int)
+
                 for i, q in enumerate(q_sol):
                     if ((i != (len(q_sol)-1)) and (i % 2 == 0)):
                         continue
@@ -174,7 +206,32 @@ if __name__ == "__main__":
                                 np.append(q, deg_q[-2:]))
                         deg_q = np.append(q, deg_q[-2:])
                         rad_q = np.deg2rad(deg_q)
-                        update_viz(np.deg2rad(q[:-2]), goal_pos)
+                        update_viz(rad_q[:-2], goal_pos)
+                reached = True
+                last_reach_time = time.time()
+            elif SOLVER == "RTM/A":
+                if RTM_MODEL is None:
+                    raise ValueError("RTM Model not loaded")
+                _, rtm_theta = rtm_traj(
+                    [rad_q[:-2], np.zeros(4)], goal_pos, braccio, RTM_MODEL
+                )
+                q_sol = np.rad2deg(
+                    pdff_traj([rad_q[:-2], np.zeros(4)],
+                              goal_pos, braccio, Theta=rtm_theta)
+                ).astype(int)
+
+                for i, q in enumerate(q_sol):
+                    if ((i != (len(q_sol)-1)) and (i % 2 == 0)):
+                        continue
+                    if ((q >= 0) & (q <= 180)).all():
+                        if MODE == "DEMO":
+                            braccio_driver.set_joint_angles(
+                                np.append(q, deg_q[-2:]))
+                        deg_q = np.append(q, deg_q[-2:])
+                        rad_q = np.deg2rad(deg_q)
+                        update_viz(rad_q[:-2], goal_pos)
+                reached = True
+                last_reach_time = time.time()
             else:
                 check_procexit_wait()
                 # raise ValueError("Invalid Solver")
