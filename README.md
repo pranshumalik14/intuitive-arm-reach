@@ -24,5 +24,5 @@ If you're getting a permission error try:
 
 `chmod +x setup.sh`
 
-
-
+# Proximodistal Freezing-Freeing Exploration Demo
+This algorithm is the primary method of encoding and learning new motions in our project. You can find a demo [here](https://pranshumalik14.github.io/intuitive-arm-reach/notebooks/pdff_impl.jl.html). More details on how it has been used can be found in our poster and project report.
